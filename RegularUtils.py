@@ -3,42 +3,45 @@ from abc import ABC, abstractmethod
 import re # for regex
 from CFUtils import CFG, Node
 
-epsilon = 'ε'
+ε = 'ε'
 
 class FA(ABC):
   """
   Superclass for representing a finite automata (DFA or NFA)
 
   Args:
-    filename (str): filename for .jff file to process into a state machine
+    Q (set) : set of ids for states in the automata, default: None
+    Σ (set) : set of alphabet symbols, default: empty set
+    delta (dict) : transition function (w/out ε-transitions). default: {}
+      keys are state ids, values are dicts mapping characters to list of resulting states
+    e_delta (dict) : dictionary of ε-transitions. default: {}
+      keys are state ids, values are lists of resulting states on ε-transitions.
+    q0 (str) : id for the start state. default: None
+    F (set) : set of all final state ids. default: empty set
 
   Attributes:
-    states (set): set of ids for states in the automata
-    alphabet (set): set of alphabet symbols
-    transitions (dict): transition function (w/out epsilon). keys are state ids, values are dictionaries that map
-      input characters to a list of resulting states.
-    e_transitions (dict): epsilon transitions. keys are state ids, values are a list of resulting states from epsilon transitions.
-    start (str): starting state id
-    final (set): set of all final state ids
-  
-  Raises:
-    AttributeError: If given .jff file is not for a finite automata
-    AttributeError: if given automata has no start state
+    states (set) : set of ids for states in the automata
+    alphabet (set) : set of alphabet symbols
+    transitions (dict) : transition function (w/out ε-transitions). 
+      keys are state ids, values are dicts mapping characters to list of resulting states
+    e_transitions (dict) : dictionary of ε-transitions.
+      keys are state ids, values are lists of resulting states on ε-transitions.
+    start (str) : id for the start state
+    final (set) : set of all final state ids
   """
-  def __init__(self, Q=None, alpha=set(), delta={}, e_delta={}, q0=None, F=set()):
+  def __init__(self, Q=None, Σ=set(), delta={}, e_delta={}, q0=None, F=set()):
     if Q == None:
       Q = {'0'}
       q0 = '0'
       F = set()
-      delta = {'0': {c: [] for c in alpha}}
+      delta = {'0': {c: [] for c in Σ}}
       e_delta = {'0': []}
     self.states = Q
-    self.alphabet = alpha
+    self.alphabet = Σ
     self.transitions = delta
     self.e_transitions = e_delta
     self.start = q0
     self.final = F 
-    pass
 
   def read(self, input):
     """
@@ -57,6 +60,16 @@ class FA(ABC):
     return curr in automata.final
   
   def test(self, input, expected=True):
+    """
+    Processes given input string and returns if the acceptance behavior matches expected
+
+    Args:
+      input (str) : input string to read
+      expected (bool) : expected result of computation
+
+    Returns:
+      Boolean representing whether this automata matches the expected behavior on the given input string
+    """
     result = self.read(input)
     if result != expected:
       if expected:
@@ -65,7 +78,6 @@ class FA(ABC):
         print(f"reading {format_input(input)} - expected: reject , actual: accept")
     return result == expected
     
-
   def print(self):
     """
     Prints 5-tuple info for this finite automata
@@ -76,31 +88,26 @@ class FA(ABC):
     print("final states:", self.final)
     print("transitions:")
     for s in self.states:
-      print("\t",s,":",self.transitions[s],"epsilon:",self.e_transitions[s])
+      print("\t",s,":",self.transitions[s],"ε:",self.e_transitions[s])
 
   def is_empty(self):
     """
-    Determines if this automata accepts the empty language.
+    Determines if this automata decides the empty language.
 
     Returns:
       Boolean representing if this automata accepts the empty langauge. 
       True if it accepts no strings, False otherwise.
     """
     visited = set()
-    to_visit = [self.start]
+    to_visit = {self.start}
     while len(to_visit) > 0:
       next = to_visit.pop()
       visited.add(next)
       if next in self.final:
         return False
       else:
-        for e in self.alphabet:
-          for q in self.transitions[next][e]:
-            if q not in visited and q not in to_visit:
-              to_visit.append(q)
-        for q in self.e_transitions[next]:
-          if q not in visited and q not in to_visit:
-              to_visit.append(q)
+        to_visit.extend([q for q in self.e_transitions[next] if q not in visited])
+        to_visit.extend([q for e in self.alphabet for q in self.transitions[next][e] if q not in visited])
     return True
 
   def equals(self, other):
@@ -116,28 +123,38 @@ class FA(ABC):
     """
     this = self.to_dfa()
     that = other.to_dfa()
-    c = this.complement().intersect(that).union(that.complement().intersect(this))
+    # c = this.complement().intersect(that).union(that.complement().intersect(this))
+    c = this.minus(that).union(that.minus(this))
     return c.is_empty()
   
   def find_difference(self, other):
+    """
+    Finds and returns a string that this and the given automata behave differently on, if one exists
+
+    Args:
+      other (FA): another finite automata
+
+    Returns:
+      string that is either accepted by self and rejected by other, or rejected by self and accepted by other
+      None if the two automata decide the same language
+    """
     this = self.to_dfa()
     that = other.to_dfa()
-    c = this.complement().intersect(that).union(that.complement().intersect(this))
+    c = this.minus(that).union(that.minus(this))
+
     visited = set()
-    to_visit = [(c.start, '')]
+    to_visit = {c.start}
+    paths = {c.start: ''}
     while len(to_visit) > 0:
-      next, path = to_visit.pop()
+      next = to_visit.pop()
       visited.add(next)
       if next in c.final:
-        return path
+        return paths[next]
       else:
-        for e in c.alphabet:
-          for q in c.transitions[next][e]:
-            if q not in visited and q not in to_visit:
-              to_visit.append((q, f"{path}{e}"))
-        for q in c.e_transitions[next]:
-          if q not in visited and q not in to_visit:
-              to_visit.append((q, path))
+        paths.update({q: f"{paths[next]}{e}" for e in c.alphabet for q in c.transitions[next][e] if q not in paths.keys()})
+        to_visit.update([q for e in c.alphabet for q in c.transitions[next][e] if q not in visited])
+        paths.update({q: paths[next] for q in c.e_transitions[next] if q not in paths.keys()})
+        to_visit.update([q for q in c.e_transitions[next] if q not in visited])
     return None
 
 
@@ -159,23 +176,30 @@ class DFA(FA):
   Must have no epsilon transitions.
 
   Args:
-    filename (str): filename for .jff file to process into a state machine. 
-      If no filename provided, creates a DFA with an empty 5-tuple instead.
+    Q (set) : set of ids for states in the automata, default: None
+    Σ (set) : set of alphabet symbols, default: empty set
+    delta (dict) : transition function (w/out ε-transitions). default: {}
+      keys are state ids, values are dicts mapping characters to list of resulting states
+    e_delta (dict) : dictionary of ε-transitions. default: {}
+      keys are state ids, values are lists of resulting states on ε-transitions.
+    q0 (str) : id for the start state. default: None
+    F (set) : set of all final state ids. default: empty set
   
   Attributes:
-    states (set): set of ids for states in the automata
-    alphabet (set): set of alphabet symbols
-    transitions (dict): transition function. keys are state ids, values are dictionaries that map
-      input characters to a list of resulting states.
-    start (str): starting state id
-    final (set): set of all final state ids
+    states (set) : set of ids for states in the automata
+    alphabet (set) : set of alphabet symbols
+    transitions (dict) : transition function (w/out ε-transitions). 
+      keys are state ids, values are dicts mapping characters to list of resulting states
+    e_transitions (dict) : dictionary of ε-transitions.
+      keys are state ids, values are lists of resulting states on ε-transitions.
+    start (str) : id for the start state
+    final (set) : set of all final state ids
 
   Raises:
-    TypeError: if given .jff file is not for a finite automata
-    TypeError: if given .jff file does not represent a valid DFA
+    TypeError: if given 5-tuple does not represent a valid DFA
   """
-  def __init__(self, Q=None, alpha=set(), delta={}, e_delta={}, q0=None, F=set()):
-    super().__init__(Q, alpha, delta, e_delta, q0, F)
+  def __init__(self, Q=None, Σ=set(), delta={}, e_delta={}, q0=None, F=set()):
+    super().__init__(Q, Σ, delta, e_delta, q0, F)
     if not self.is_valid():
       raise TypeError('input not a valid DFA')
 
@@ -218,8 +242,10 @@ class DFA(FA):
   def intersect(self, other):
     """
     Creates a DFA which accepts the intersection of this DFA and the given DFA's langauges.
-
     Assumes the alphabets of the two DFAs are the same.
+
+    Args:
+      other (FA):
 
     Returns:
       A new DFA whose accepted langauge is the intersection of this DFA's and the given DFA's accepted lanaguges.
@@ -236,8 +262,10 @@ class DFA(FA):
   def union(self, other):
     """
     Creates a DFA which accepts the union of this DFA and the given DFA's langauges.
-
     Assumes the alphabets of the two DFAs are the same.
+
+    Args:
+      other (FA): 
 
     Returns:
       A new DFA whose accepted langauge is the union of this DFA's and the given DFA's accepted lanaguges.
@@ -250,16 +278,36 @@ class DFA(FA):
             e_delta={q: [] for q in states},
             q0=(self.start, other.start),
             F={q for q in states if (q[0] in self.final or q[1] in other.final)})
+  
+  def minus(self, other):
+    """
+    Creates a DFA which accepts the set difference of this DFA and the given DFA's languages.
+    Assumes the alphabets of the two DFAs are the same.
+
+    Args:
+      other (FA):
+
+    Returns:
+      A new DFA whose accepted language is the set difference of this DFA and the given DFA's languages.
+    """
+    other = other.to_dfa()
+    return self.union(other.complement())
       
 class NFA(FA):
   """
-  Represents a Non-dDeterministic Finite Automata.
+  Represents a Non-Deterministic Finite Automata.
 
   Subclass of FA.
 
   Args:
-    filename (str): filename for .jff file to process into a state machine. 
-      If no filename provided, creates an NFA with an empty 5-tuple instead.
+    Q (set) : set of ids for states in the automata, default: None
+    Σ (set) : set of alphabet symbols, default: empty set
+    delta (dict) : transition function (w/out ε-transitions). default: {}
+      keys are state ids, values are dicts mapping characters to list of resulting states
+    e_delta (dict) : dictionary of ε-transitions. default: {}
+      keys are state ids, values are lists of resulting states on ε-transitions.
+    q0 (str) : id for the start state. default: None
+    F (set) : set of all final state ids. default: empty set
   
   Attributes:
     states (set): set of ids for states in the automata
@@ -268,9 +316,6 @@ class NFA(FA):
       input characters to a list of resulting states.
     start (str): starting state id
     final (set): set of all final state ids
-
-  Raises:
-    TypeError: if given .jff file is not for a finite automata
   """
   def __init__(self, Q=None, alpha=set(), delta={}, e_delta={}, q0=None, F=set()):
     super().__init__(Q, alpha, delta, e_delta, q0, F)
@@ -338,6 +383,16 @@ class NFA(FA):
     return self.dfa
 
   def union(self, other):
+    """
+    Creates an NFA which accepts the union of this NFA and the given FA's langauges.
+    Assumes the alphabets of the two FAs are the same.
+
+    Args:
+      other (FA):
+
+    Returns:
+      A new NFA whose accepted langauge is the union of this NFA's and the given FA's accepted lanaguges.
+    """
     transitions = {0: {x: [] for x in self.alphabet}}
     e_transitions = {0: [f"a{self.start}", f"b{other.start}"]}
     for s in self.states:
@@ -367,6 +422,16 @@ class NFA(FA):
                F={f"a{s}" for s in self.final}.union({f"b{s}" for s in other.final}))   
 
   def concat(self, other):
+    """
+    Creates an NFA which accepts the concatenation of this NFA and the given FA's langauges.
+    Assumes the alphabets of the two FAs are the same.
+
+    Args:
+      other (FA):
+
+    Returns:
+      A new NFA whose accepted langauge is the concatenation of this NFA's and the given FA's accepted lanaguges.
+    """
     transitions = {}
     e_transitions = {}
     for s in self.states:
@@ -398,6 +463,12 @@ class NFA(FA):
                F={f"b{s}" for s in other.final})
 
   def star(self):
+    """
+    Creates an NFA which accepts the kleene star of this NFA's langauge.
+
+    Returns:
+      A new NFA whose accepted langauge is the kleene star of this NFA's lanaguge.
+    """
     transitions = {}
     e_transitions = {0: [f"a{self.start}"]}
     for s in self.states:
@@ -420,6 +491,19 @@ class NFA(FA):
                F={f"a{s}" for s in self.final}.union({0}))
 
 class REGEX:
+  """
+  Represents a regular expression
+
+  Args:
+    string (str): string representation of the regular expression
+    alphabet (set): alphabet the regular expression is defined over. default: None
+
+  Attributes:
+    string (str): string representation of the regular expression
+    alphabet (set): set of characters this regular expression is defined over
+    pattern (re): python regex object
+    nfa (re): an NFA which decides the language of this regular expression
+  """
   def __init__(self, string, alphabet=None):
     self.string = string
     if alphabet == None:
@@ -429,9 +513,14 @@ class REGEX:
 
     self.pattern = re.compile(self.string)
     self.nfa = None
-    self.grammar = self.generate_grammar() 
 
   def generate_grammar(self):
+    """
+    Generate a context-free grammar for regular expressions using this expression's alphabet
+
+    Returns:
+      A CFG for regular expressions using this expressions alphabet
+    """
     start = "<RE>"
     variables = {"<RE>", "<CONCAT>", "<STAR>", "<GROUP>", "<TERM>"}
     terminals = {"", "*", "|", "(", ")"}
@@ -445,22 +534,57 @@ class REGEX:
     return CFG(S=start, alpha=terminals, V=variables,R=rules)
 
   def equals(self, other):    
+    """
+    Determines if this regular expression is represents the same language as the given regex
+
+    Args:
+      other (REGEX): a regular expression
+
+    Returns:
+      True if both regular expressions represent the same language
+    """
     if isinstance(other, REGEX):
       return self.to_nfa().equals(other.to_nfa())
     else: return False
 
   def read(self, input):
+    """
+    Determines if the given input is generated by this regular expression
+
+    Args:
+      input (str): an input string
+    
+    Returns:
+      True if the given string is generated by this regular expression, False otherwise
+    """
     return self.pattern.fullmatch(input)
   
   def to_nfa(self):
+    """
+    Creates an NFA which decides the language of this regular expression
+
+    Returns:
+      An NFA which decides the language of this REGEX
+    """
     if self.nfa != None:
       return self.nfa
     else: 
-      parse_tree = self.grammar.parse_tree(self.string)
+      grammar = self.generate_grammar()
+      parse_tree = grammar.parse_tree(self.string)
       self.nfa = tree_to_nfa(parse_tree, self.alphabet)
       return self.nfa
 
 def tree_to_nfa(node, alphabet):
+  """
+  Converts the given regular expression AST to an equivalent NFA
+
+  Args:
+    node (Node): an AST for a regular expression
+    alphabet (set): the alphabet for the NFA to generate
+
+  Returns:
+    An NFA equivalent to the given AST
+  """
   if node.is_terminal:
     return str_to_nfa(node.string, alphabet)
   else:
@@ -494,6 +618,16 @@ def tree_to_nfa(node, alphabet):
         return tree_to_nfa(node.children[0], alphabet)
 
 def str_to_nfa(string, alphabet):
+  """
+  Creates an NFA which decides the language containing only the given string
+
+  Args:
+    string (str): a given string
+    alphabet (set): the alphabet for the language the NFA is defined over
+  
+  Returns:
+    An NFA which decides the language {string} for the given string
+  """
   start = 0
   states = set(range(len(string)+1))
   transitions = {state: {c: [] for c in alphabet} for state in states}
@@ -503,12 +637,21 @@ def str_to_nfa(string, alphabet):
   return NFA(Q=states, alpha=alphabet, delta=transitions, e_delta=e_transitions, q0=start, F=len(string))
   
 def format_input(string):
+  """
+  Reformat the given input string
+
+  Args:
+    string (str)
+  """
   if len(string) > 0:
     return string
   else:
-    return epsilon
+    return ε
 
 def guess_alphabet(s):
+  """
+  Attempts to determine the alphabet the given regular expression is defined over.
+  """
   alphabet = set()
   for i in range(len(s)):
     if s[i] not in "()*|":
