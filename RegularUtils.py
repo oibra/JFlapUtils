@@ -514,31 +514,3 @@ def guess_alphabet(s):
     if s[i] not in "()*|":
       alphabet.add(s[i])
   return s
-
-if __name__ == "__main__":
-  solution = DFA()
-  solution.alphabet = {'0','1'}
-  solution.states = {0,1,2,3}
-  solution.start = 0
-  solution.final = {1,2,3}
-  solution.transitions = {0: {'0': [0], '1': [1]}, 1: {'0': [2], '1': [1]}, 2: {'0': [3], '1': [1]}, 3: {'0': [0], '1': [1]}}
-
-  try:
-    test1 = DFA('../solution/test1.jff')
-    print(f"Student Solution 1 (should fail): {test1.equals(solution)}")
-  except TypeError:
-    print("student solution 1 is not a valid DFA")
-  
-  try:
-    test2 = DFA('../solution/test2.jff')
-    print(f"Student Solution 2 (should pass): {test2.equals(solution)}")
-  except TypeError:
-    print("student solution 2 is not a valid DFA")
-
-  test3 = DFA('../solution/test3.jff')
-  test4 = DFA('../solution/test4.jff')
-  test5 = DFA('../solution/test5.jff')
-
-  print(f"Student Solution 3 (should pass): {test3.equals(solution)}")
-  print(f"Student Solution 4 (should fail): {test4.equals(solution)}")
-  print(f"Student Solution 5 (should fail): {test5.equals(solution)}")
