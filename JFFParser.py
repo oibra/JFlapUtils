@@ -80,6 +80,88 @@ class JFFParser():
 
     return CFG(start, terminals, variables, rules)
 
+### AUTOMATA HELPER FUNCTIONS ###
+
+def parse_alphabet(parse_tree, type):
+  """
+  Args:
+    parse_tree: an XML parse tree for a JFlap file
+    type (str): the type of JFlap automata
+
+  Returns:
+    a set of input characters for the automata
+  """
+  if type == "fa":
+    alphabet = set()
+    delta = parse_tree.find_all('transition')
+    for e in delta:
+      read = e.find('read').string
+      if read != None:
+        alphabet.add(read)
+    return alphabet
+
+def parse_states(parse_tree):
+  """
+  Args:
+    parse_tree: an XML parse tree for a JFlap file
+  
+  Returns:
+    a set of states for the automata
+  """
+  Q = parse_tree.find_all('state')
+  return {str(q.get('id')) for q in Q}
+
+def parse_final(parse_tree):
+  """
+  Args:
+    parse_tree: an XML parse tree for a JFlap file
+
+  Returns:
+    a set of final states for the automata
+  """
+  Q = parse_tree.find_all('state')
+  return {str(q.get('id')) for q in Q if q.find('final')}
+
+def parse_start(parse_tree):
+  """
+  Args:
+    parse_tree: an XML parse tree for a JFlap file
+
+  Returns:
+    the start state for the automata
+  """
+  Q = parse_tree.find_all('state')
+  start = None
+  for q in Q:
+    if q.find('initial'):
+      if start == None:
+        start = q.get('id')
+      else:
+        raise AttributeError('too many start states')
+  return str(start)
+
+def parse_transitions(parse_tree, states, alphabet):
+  """
+  Args:
+    parse_tree:
+    states (set):
+    alphabet (set):
+
+  Returns:
+  """
+  delta = parse_tree.find_all('transition')
+  transitions = {state: {c: [] for c in alphabet} for state in states}
+  epsilon_transitions = {state: [] for state in states}
+  for e in delta:
+    read = e.find('read').string
+    if read != None: 
+      transitions[e.find('from').string][read].append(e.find('to').string)
+    else: 
+      epsilon_transitions[e.find('from').string].append(e.find('to').string)
+  return transitions, epsilon_transitions
+
+
+### GRAMMAR HELPER FUNCITONS ###
 
 def parse_variables(productions):
   """
@@ -140,81 +222,3 @@ def parse_rules(productions, variables):
           rule = rule[len(var):]
       rules[v].push(rulelist)
 
-
-def parse_alphabet(parse_tree, type):
-  """
-  Args:
-    parse_tree: an XML parse tree for a JFlap file
-    type (str): the type of JFlap automata
-
-  Returns:
-    a set of input characters for the automata
-  """
-  if type == "fa":
-    alphabet = set()
-    delta = parse_tree.find_all('transition')
-    for e in delta:
-      read = e.find('read').string
-      if read != None:
-        alphabet.add(read)
-    return alphabet
-
-def parse_states(parse_tree):
-  """
-  Args:
-    parse_tree: an XML parse tree for a JFlap file
-  
-  Returns:
-    a set of states for the automata
-  """
-  Q = parse_tree.find_all('state')
-  return {q.get('id') for q in Q}
-
-def parse_final(parse_tree):
-  """
-  Args:
-    parse_tree: an XML parse tree for a JFlap file
-
-  Returns:
-    a set of final states for the automata
-  """
-  Q = parse_tree.find_all('state')
-  return {q.get('id') for q in Q if q.find('final')}
-
-def parse_start(parse_tree):
-  """
-  Args:
-    parse_tree: an XML parse tree for a JFlap file
-
-  Returns:
-    the start state for the automata
-  """
-  Q = parse_tree.find_all('state')
-  start = None
-  for q in Q:
-    if q.find('initial'):
-      if start == None:
-        start = q.get('id')
-      else:
-        raise AttributeError('too many start states')
-  return start
-
-def parse_transitions(parse_tree, states, alphabet):
-  """
-  Args:
-    parse_tree:
-    states (set):
-    alphabet (set):
-
-  Returns:
-  """
-  delta = parse_tree.find_all('transition')
-  transitions = {state: {c: [] for c in alphabet} for state in states}
-  epsilon_transitions = {state: [] for state in states}
-  for e in delta:
-    read = e.find('read').string
-    if read != None: 
-      transitions[e.find('from').string][read].append(e.find('to').string)
-    else: 
-      epsilon_transitions[e.find('from').string].append(e.find('to').string)
-  return transitions, epsilon_transitions
