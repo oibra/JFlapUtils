@@ -309,6 +309,7 @@ class DFA(FA):
     if self.minimal:
       return self
     
+    # helper to find next pair of unmarked states that cannot be merged
     def find_next(merger):
       for q in self.states:
         for r in self.states:
@@ -317,6 +318,24 @@ class DFA(FA):
               if not merger[self.transitions[q][c][0]][self.transitions[r][c][0]]:
                 return q, r            
       return None, None
+    
+    # helper to simplify and rename state names
+    def simplify(states, transitions, start, final):
+      mapping = {}
+      i = 0
+      for q in states:
+        mapping[str(i)] = q
+        i += 1
+      inverted = {v: k for k,v in mapping.items()}
+      new_states = {str(j) for j in range(i)}
+      new_transitions = {q: {c: [inverted[transitions[mapping[q]][c][0]]] for c in self.alphabet} for q in new_states}
+      return DFA(new_states, 
+                 self.alphabet, 
+                 new_transitions, 
+                 {q: [] for q in new_states}, 
+                 inverted[start], 
+                 {q for q in new_states if mapping[q] in final}, 
+                 True)
     
     merge = {q: {r: True for r in self.states} for q in self.states}
     for q in self.states:
@@ -358,69 +377,13 @@ class DFA(FA):
       for q in s:
         map_to_new[q] = m
     
-    transitions = {q: {c: [] for c in self.alphabet} for q in states}
-    for q in states:
-      for c in self.alphabet:
-        if q in old_states:
-          transitions[q][c].append(map_to_new[self.transitions[q][c][0]])
-        else:
-          old = None
-          for r in self.states:
-            if map_to_new[r] == q:
-              old = r
-              break
-          a = self.transitions[old]
-          b = a[c][0]
-          transitions[q][c].append(map_to_new[b])
+    transitions = {q: {c: [map_to_new[self.transitions[q][c][0]]] for c in self.alphabet} for q in old_states}
+    transitions.update({q: {c: [map_to_new[self.transitions[[r for r in self.states if map_to_new[r] == q][0]][c][0]]] for c in self.alphabet} for q in merged_states})
 
-    final = {q for q in old_states if q in self.final}
-    for s in merged_states:
-      for q in s:
-        if q in self.final:
-          final.add(s)
-          break
+    final = {q for q in old_states if q in self.final}.union({s for s in merged_states if len({q for q in s if q in self.final}) > 0})
+    start = map_to_new[self.start]
 
-    start = self.start if self.start in old_states else [s for s in merged_states if str(self.start) in s][0]
-
-    return simplify(states, self.alphabet, transitions, start, final)
-
-  
-
-def simplify(states,  alphabet, transitions, start, final):
-  """
-  Simplifies the state names of a DFA to a 0-indexed list while maintaining functional equivalence.
-
-  Args:
-    states (set)
-    start (str)
-    final (set)
-    alphabet (set)
-    transitions (dict)
-
-  Returns:
-    An equivalnet DFA with simplified state names
-  """
-  mapping = {}
-  inverted = {}
-  i = 0
-  new_states = set()
-  new_start = None
-  for q in states:
-    mapping[str(i)] = q
-    inverted[q] = str(i)
-    if q == start:
-      new_start = str(i)
-    new_states.add(str(i))
-    i += 1
-    
-  new_final = {q for q in new_states if mapping[q] in final}
-  new_transitions = {q: {c: [] for c in alphabet} for q in new_states}
-  for q in new_states:
-    for c in alphabet:
-      new_transitions[q][c].append(inverted[transitions[mapping[q]][c][0]])
-  new_e_transitions = {q: [] for q in new_states}
-
-  return DFA(new_states, alphabet, new_transitions, new_e_transitions, new_start, new_final, True)
+    return simplify(states, transitions, start, final)
 
 class NFA(FA):
   """
