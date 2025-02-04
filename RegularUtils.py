@@ -337,13 +337,7 @@ class DFA(FA):
                  {q for q in new_states if mapping[q] in final}, 
                  True)
     
-    merge = {q: {r: True for r in self.states} for q in self.states}
-    for q in self.states:
-      for r in self.states:
-        if (q in self.final) != (r in self.final):
-          merge[q][r] = False
-          merge[r][q] = False
-    
+    merge = {q: {r: (q in self.final) == (r in self.final) for r in self.states} for q in self.states}    
     next_a, next_b = find_next(merge)
     while next_a != None:
       merge[next_a][next_b] = False
@@ -359,9 +353,7 @@ class DFA(FA):
           m = True
           n = [s for s in new_states if q in s]
           if len(n) > 0:
-            new_states.remove(n[0])
-            n[0].add(r)
-            new_states.append(n[0])
+            new_states[new_states.index(n[0])].add(r)
           else:
             new_states.append({str(q), str(r)})
           del merge[r][q]
@@ -373,9 +365,9 @@ class DFA(FA):
     for s in new_states:
       m = ''.join(s)
       merged_states.add(m)
-      states.add(m)
       for q in s:
         map_to_new[q] = m
+    states.update(merged_states)
     
     transitions = {q: {c: [map_to_new[self.transitions[q][c][0]]] for c in self.alphabet} for q in old_states}
     transitions.update({q: {c: [map_to_new[self.transitions[[r for r in self.states if map_to_new[r] == q][0]][c][0]]] for c in self.alphabet} for q in merged_states})
