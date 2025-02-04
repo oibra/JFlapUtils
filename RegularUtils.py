@@ -247,7 +247,7 @@ class DFA(FA):
     Assumes the alphabets of the two DFAs are the same.
 
     Args:
-      other (FA):
+      other (FA): another finite automata
 
     Returns:
       A new DFA whose accepted langauge is the intersection of this DFA's and the given DFA's accepted lanaguges.
@@ -269,7 +269,7 @@ class DFA(FA):
     Assumes the alphabets of the two DFAs are the same.
 
     Args:
-      other (FA): 
+      other (FA): another finite automata
 
     Returns:
       A new DFA whose accepted langauge is the union of this DFA's and the given DFA's accepted lanaguges.
@@ -290,7 +290,7 @@ class DFA(FA):
     Assumes the alphabets of the two DFAs are the same.
 
     Args:
-      other (FA):
+      other (FA): another finite automata
 
     Returns:
       A new DFA whose accepted language is the set difference of this DFA and the given DFA's languages.
@@ -480,7 +480,7 @@ class NFA(FA):
     Assumes the alphabets of the two FAs are the same.
 
     Args:
-      other (FA):
+      other (FA): another finite automata
 
     Returns:
       A new NFA whose accepted langauge is the union of this NFA's and the given FA's accepted lanaguges.
@@ -519,7 +519,7 @@ class NFA(FA):
     Assumes the alphabets of the two FAs are the same.
 
     Args:
-      other (FA):
+      other (FA): another finite automata
 
     Returns:
       A new NFA whose accepted langauge is the concatenation of this NFA's and the given FA's accepted lanaguges.
@@ -630,7 +630,7 @@ class REGEX:
     Determines if this regular expression is represents the same language as the given regex
 
     Args:
-      other (REGEX): a regular expression
+      other (REGEX): another regular expression
 
     Returns:
       True if both regular expressions represent the same language
