@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 from RegularUtils import DFA, NFA, REGEX
 from CFUtils import CFG, PDA
+from TMUtils import TM, square
 
 class JFFParser():
   """
@@ -93,6 +94,19 @@ class JFFParser():
       raise AttributeError('no start state')
     transitions = parse_transitions(self.parse_tree, type, states, alphabet, stack)
     return PDA(states, alphabet, stack, transitions, start, final_states)
+  
+  def generate_tm(self):
+    type = self.parse_tree.find('type').string
+    if type != 'turing':
+      raise TypeError('input file is not for a Turing Machine!')
+    alphabet = parse_alphabet(self.parse_tree, type)
+    states = parse_states(self.parse_tree)
+    final_states = parse_final(self.parse_tree)
+    start = parse_start(self.parse_tree)
+    if start == None:
+      raise AttributeError('no start state')
+    transitions = parse_transitions(self.parse_tree, type, states, alphabet)
+    return TM(states, alphabet, transitions, start, final_states)
 
 ### AUTOMATA HELPER FUNCTIONS ###
 
@@ -105,14 +119,19 @@ def parse_alphabet(parse_tree, type):
   Returns:
     a set of input characters for the automata
   """
-  if type == "fa" or type == 'pda':
-    alphabet = set()
-    delta = parse_tree.find_all('transition')
+  alphabet = set()
+  delta = parse_tree.find_all('transition')
+  if type == "fa" or type == 'pda' or type == 'turing':
     for e in delta:
       read = e.find('read').string
       if read != None:
         alphabet.add(read)
-    return alphabet
+  if type == 'turing':
+    for e in delta:
+      write = e.find('write').string
+      if write != None:
+        alphabet.add(read)
+  return alphabet
 
 def parse_stack(parse_tree):
   alphabet = set()
@@ -189,14 +208,25 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
     stack = alphabet.union({''})
     transitions = {state: {c: {x: [] for x in stack} for c in alphabet} for state in states}
     for e in delta:
-      read = e.find('read').string
       q = e.find('from').string
       r = e.find('to').string
-      push = e.find('push').string
-      pop = e.find('pop').string
+      read = '' if e.find('read').string == None else e.find('read').string
+      push = '' if e.find('push').string == None else e.find('push').string
+      pop = '' if e.find('pop').string == None else e.find('pop').string
       transitions[q][read][pop].append((r, push))
     return transitions
-
+  elif type == 'turing':
+    alphabet = alphabet.union({square})
+    transitions = {state: {c: None for c in alphabet} for state in states}
+    for e in delta:
+      q = e.find('from').string
+      r = e.find('to').string
+      read = square if e.find('read').string == None else e.find('read').string
+      write = e.find('write').string
+      write = square if read == None else write
+      move = 1 if e.find('move').string == 'R' else -1
+      transitions[q][read] = (r, write, move)
+    return transitions
 
 ### GRAMMAR HELPER FUNCITONS ###
 

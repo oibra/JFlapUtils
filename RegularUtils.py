@@ -1,9 +1,8 @@
 from itertools import product
 from abc import ABC, abstractmethod
 import re # for regex
-from CFUtils import CFG, Node
-
-ε = 'ε'
+from StringUtils import format_input, ε
+from CFUtils import CFG
 
 class FA(ABC):
   """
@@ -29,13 +28,15 @@ class FA(ABC):
     start (str) : id for the start state
     final (set) : set of all final state ids
   """
-  def __init__(self, Q=None, Σ=set(), delta={}, e_delta={}, q0=None, F=set()):
+  def __init__(self, Q=None, Σ=set(), delta={}, e_delta=None, q0=None, F=set()):
     if Q == None:
       Q = {'0'}
       q0 = '0'
       F = set()
       delta = {'0': {c: [] for c in Σ}}
       e_delta = {'0': []}
+    elif e_delta == None:
+      e_delta = {q: [] for q in Q}
     self.states = Q
     self.alphabet = Σ
     self.transitions = delta
@@ -88,7 +89,7 @@ class FA(ABC):
     print("final states:", self.final)
     print("transitions:")
     for s in self.states:
-      print("\t",s,":",self.transitions[s],"ε:",self.e_transitions[s])
+      print("\t",s,":",self.transitions[s],ε,":",self.e_transitions[s])
 
   def is_empty(self):
     """
@@ -197,7 +198,7 @@ class DFA(FA):
   Raises:
     TypeError: if given 5-tuple does not represent a valid DFA
   """
-  def __init__(self, Q=None, Σ=set(), delta={}, e_delta={}, q0=None, F=set(), minimal=False):
+  def __init__(self, Q=None, Σ=set(), delta={}, e_delta=None, q0=None, F=set(), minimal=False):
     super().__init__(Q, Σ, delta, e_delta, q0, F)
     self.minimal = minimal
     valid, err = self.is_valid()
@@ -401,7 +402,7 @@ class NFA(FA):
     start (str): starting state id
     final (set): set of all final state ids
   """
-  def __init__(self, Q=None, Σ=set(), delta={}, e_delta={}, q0=None, F=set()):
+  def __init__(self, Q=None, Σ=set(), delta={}, e_delta=None, q0=None, F=set()):
     super().__init__(Q, Σ, delta, e_delta, q0, F)
     self.dfa = None
 
@@ -611,6 +612,25 @@ class REGEX:
     """
     return self.pattern.fullmatch(input)
   
+  def test(self, input, expected=True):
+    """
+    Processes given input string and returns if the acceptance behavior matches expected
+
+    Args:
+      input (str) : input string to read
+      expected (bool) : expected result of computation
+
+    Returns:
+      Boolean representing whether this automata matches the expected behavior on the given input string
+    """
+    result = self.read(input)
+    if result != expected:
+      if expected:
+        print(f"reading {format_input(input)} - expected: accept , actual: reject")
+      else:
+        print(f"reading {format_input(input)} - expected: reject , actual: accept")
+    return result == expected
+  
   def to_nfa(self):
     """
     Creates an NFA which decides the language of this regular expression
@@ -687,18 +707,6 @@ def str_to_nfa(string, alphabet):
   for i in range(len(string)):
     transitions[str(i)][string[i]] = [str(i+1)]
   return NFA(Q=states, alpha=alphabet, delta=transitions, e_delta=e_transitions, q0=start, F=str(len(string)))
-  
-def format_input(string):
-  """
-  Reformat the given input string
-
-  Args:
-    string (str)
-  """
-  if len(string) > 0:
-    return string
-  else:
-    return ε
 
 def guess_alphabet(s):
   """
