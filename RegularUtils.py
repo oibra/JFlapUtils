@@ -575,9 +575,9 @@ class REGEX:
     """
     start = "<RE>"
     variables = {"<RE>", "<CONCAT>", "<STAR>", "<GROUP>", "<TERM>"}
-    terminals = {"", "*", "|", "(", ")"}
+    terminals = {"", "*", "+", "(", ")"}
     terminals.update(self.alphabet)
-    rules = {"<RE>": [["<CONCAT>"], ["CONCAT", "|", "<RE>"]],
+    rules = {"<RE>": [["<CONCAT>"], ["CONCAT", "+", "<RE>"]],
              "<CONCAT>": [["<STAR>"], ["<STAR>", "<CONCAT>"]],
              "<STAR>": [["<GROUP>"], ["<GROUP>", "*"]],
              "<GROUP>": [["<TERM>"], ["(", "<RE>", ")"]],
@@ -706,6 +706,6 @@ def guess_alphabet(s):
   """
   alphabet = set()
   for i in range(len(s)):
-    if s[i] not in "()*|":
+    if s[i] not in "()*+":
       alphabet.add(s[i])
   return s

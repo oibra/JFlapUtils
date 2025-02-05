@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 from RegularUtils import DFA, NFA, REGEX
-from CFUtils import CFG
+from CFUtils import CFG, PDA
 
 class JFFParser():
   """
@@ -31,7 +31,7 @@ class JFFParser():
     start = parse_start(self.parse_tree)
     if start == None:
       raise AttributeError('no start state')
-    transitions, epsilon_transitions = parse_transitions(self.parse_tree, states, alphabet)
+    transitions, epsilon_transitions = parse_transitions(self.parse_tree, type, states, alphabet)
     return DFA(Q=states, alpha=alphabet, delta=transitions, e_delta=epsilon_transitions, q0=start, F=final_states)
 
   def generate_nfa(self):
@@ -49,7 +49,7 @@ class JFFParser():
     start = parse_start(self.parse_tree)
     if start == None:
       raise AttributeError('no start state')
-    transitions, epsilon_transitions = parse_transitions(self.parse_tree, states, alphabet)
+    transitions, epsilon_transitions = parse_transitions(self.parse_tree, type, states, alphabet)
     return NFA(Q=states, alpha=alphabet, delta=transitions, e_delta=epsilon_transitions, q0=start, F=final_states)
 
   def generate_regex(self):
@@ -79,6 +79,20 @@ class JFFParser():
     rules = parse_rules(productions, variables)
 
     return CFG(start, terminals, variables, rules)
+  
+  def generate_pda(self):
+    type = self.parse_tree.find('type').string
+    if type != 'pda':
+      raise TypeError('input file is not for a PDA!')
+    alphabet = parse_alphabet(self.parse_tree, type)
+    stack = parse_stack(self.parse_tree)
+    states = parse_states(self.parse_tree)
+    final_states = parse_final(self.parse_tree)
+    start = parse_start(self.parse_tree)
+    if start == None:
+      raise AttributeError('no start state')
+    transitions = parse_transitions(self.parse_tree, type, states, alphabet, stack)
+    return PDA(states, alphabet, stack, transitions, start, final_states)
 
 ### AUTOMATA HELPER FUNCTIONS ###
 
@@ -91,7 +105,7 @@ def parse_alphabet(parse_tree, type):
   Returns:
     a set of input characters for the automata
   """
-  if type == "fa":
+  if type == "fa" or type == 'pda':
     alphabet = set()
     delta = parse_tree.find_all('transition')
     for e in delta:
@@ -99,6 +113,16 @@ def parse_alphabet(parse_tree, type):
       if read != None:
         alphabet.add(read)
     return alphabet
+
+def parse_stack(parse_tree):
+  alphabet = set()
+  delta = parse_tree.find_all('transition')
+  for e in delta:
+    on = e.find('push').string
+    off = e.find('pop').string
+    if on != None: alphabet.add(on)
+    if off != None: alphabet.add(off)
+  return alphabet
 
 def parse_states(parse_tree):
   """
@@ -140,7 +164,7 @@ def parse_start(parse_tree):
         raise AttributeError('too many start states')
   return str(start)
 
-def parse_transitions(parse_tree, states, alphabet):
+def parse_transitions(parse_tree, type, states, alphabet, stack=None):
   """
   Args:
     parse_tree:
@@ -150,15 +174,28 @@ def parse_transitions(parse_tree, states, alphabet):
   Returns:
   """
   delta = parse_tree.find_all('transition')
-  transitions = {state: {c: [] for c in alphabet} for state in states}
-  epsilon_transitions = {state: [] for state in states}
-  for e in delta:
-    read = e.find('read').string
-    if read != None: 
-      transitions[e.find('from').string][read].append(e.find('to').string)
-    else: 
-      epsilon_transitions[e.find('from').string].append(e.find('to').string)
-  return transitions, epsilon_transitions
+  if type == 'fa':
+    transitions = {state: {c: [] for c in alphabet} for state in states}
+    epsilon_transitions = {state: [] for state in states}
+    for e in delta:
+      read = e.find('read').string
+      if read != None: 
+        transitions[e.find('from').string][read].append(e.find('to').string)
+      else: 
+        epsilon_transitions[e.find('from').string].append(e.find('to').string)
+    return transitions, epsilon_transitions
+  elif type == 'pda':
+    alphabet = alphabet.union({''})
+    stack = alphabet.union({''})
+    transitions = {state: {c: {x: [] for x in stack} for c in alphabet} for state in states}
+    for e in delta:
+      read = e.find('read').string
+      q = e.find('from').string
+      r = e.find('to').string
+      push = e.find('push').string
+      pop = e.find('pop').string
+      transitions[q][read][pop].append((r, push))
+    return transitions
 
 
 ### GRAMMAR HELPER FUNCITONS ###
