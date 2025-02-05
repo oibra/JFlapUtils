@@ -28,21 +28,22 @@ class FA(ABC):
     start (str) : id for the start state
     final (set) : set of all final state ids
   """
-  def __init__(self, Q=None, Σ=set(), delta={}, e_delta=None, q0=None, F=set()):
+  def __init__(self, Q=None, sigma=set(), delta={}, q0=None, F=set()):
     if Q == None:
       Q = {'0'}
       q0 = '0'
       F = set()
       delta = {'0': {c: [] for c in Σ}}
-      e_delta = {'0': []}
-    elif e_delta == None:
-      e_delta = {q: [] for q in Q}
+      # e_delta = {'0': []}
+    # elif e_delta == None:
+    #   e_delta = {q: [] for q in Q}
     self.states = Q
-    self.alphabet = Σ
+    self.alphabet = sigma
     self.transitions = delta
-    self.e_transitions = e_delta
+    # self.e_transitions = e_delta
     self.start = q0
     self.final = F 
+    self.sigma_alphabet = self.alphabet.union({''})
 
   def read(self, input):
     """
@@ -89,7 +90,7 @@ class FA(ABC):
     print("final states:", self.final)
     print("transitions:")
     for s in self.states:
-      print("\t",s,":",self.transitions[s],ε,":",self.e_transitions[s])
+      print("\t",s,":",self.transitions[s]) # ,ε,":",self.e_transitions[s])
 
   def is_empty(self):
     """
@@ -107,8 +108,9 @@ class FA(ABC):
       if next in self.final:
         return False
       else:
-        to_visit.extend([q for q in self.e_transitions[next] if q not in visited])
-        to_visit.extend([q for e in self.alphabet for q in self.transitions[next][e] if q not in visited])
+        # to_visit.extend([q for q in self.e_transitions[next] if q not in visited])
+        # to_visit.extend([q for e in self.alphabet for q in self.transitions[next][e] if q not in visited])
+        to_visit.extend([q for e in self.sigma_alphabet for q in self.transitions[next][e] if q not in visited])
     return True
 
   def equals(self, other):
@@ -151,10 +153,12 @@ class FA(ABC):
       if next in c.final:
         return paths[next]
       else:
-        paths.update({q: f"{paths[next]}{e}" for e in c.alphabet for q in c.transitions[next][e] if q not in paths.keys()})
-        to_visit.update([q for e in c.alphabet for q in c.transitions[next][e] if q not in visited])
-        paths.update({q: paths[next] for q in c.e_transitions[next] if q not in paths.keys()})
-        to_visit.update([q for q in c.e_transitions[next] if q not in visited])
+        paths.update({q: f"{paths[next]}{e}" for e in c.sigma_alphabet for q in c.transitions[next][e] if q not in paths.keys()})
+        to_visit.update([q for e in c.sigma_alphabet for q in c.transitions[next][e] if q not in visited])
+        # paths.update({q: f"{paths[next]}{e}" for e in c.alphabet for q in c.transitions[next][e] if q not in paths.keys()})
+        # to_visit.update([q for e in c.alphabet for q in c.transitions[next][e] if q not in visited])
+        # paths.update({q: paths[next] for q in c.e_transitions[next] if q not in paths.keys()})
+        # to_visit.update([q for q in c.e_transitions[next] if q not in visited])
     return None
 
 
@@ -198,8 +202,8 @@ class DFA(FA):
   Raises:
     TypeError: if given 5-tuple does not represent a valid DFA
   """
-  def __init__(self, Q=None, Σ=set(), delta={}, e_delta=None, q0=None, F=set(), minimal=False):
-    super().__init__(Q, Σ, delta, e_delta, q0, F)
+  def __init__(self, Q=None, sigma=set(), delta={}, q0=None, F=set(), minimal=False):
+    super().__init__(Q, sigma, delta, q0, F)
     self.minimal = minimal
     valid, err = self.is_valid()
     if not valid:
@@ -219,7 +223,9 @@ class DFA(FA):
       for c in self.alphabet:
         if len(self.transitions[q][c]) != 1:
           return False, f"state {q} has {len(self.transitions[q][c])} transitions on symbol '{c}'"
-      if len(self.e_transitions[q]) != 0:
+      # if len(self.e_transitions[q]) != 0:
+      #   return False, f"state {q} has ε-transitions"
+      if len(self.transitions[q]['']) != 0:
         return False, f"state {q} has ε-transitions"
     return True
   
@@ -235,9 +241,9 @@ class DFA(FA):
       A new DFA whose accepted langauge is the complement of this DFA's accepted langauge.
     """
     return DFA(Q=self.states.copy(), 
-            alpha=self.alphabet.copy(),
+            sigma=self.alphabet.copy(),
             delta=self.transitions.copy(),
-            e_delta=self.e_transitions.copy(),
+            # e_delta=self.e_transitions.copy(),
             q0=self.start,
             F=self.states.difference(self.final),
             minimal=self.minimal)
@@ -257,9 +263,9 @@ class DFA(FA):
     temp_states = set(product(self.states, other.states))
     temp_final = set(product(self.final, other.final))
     result = DFA(Q={f"{s[0]}x{s[1]}" for s in temp_states},
-                alpha=self.alphabet.copy(),
+                sigma=self.alphabet.copy(),
                 delta={f"{s[0]}x{s[1]}": {e: [f"{self.transitions[s[0]][e][0]}x{other.transitions[s[1]][e][0]}"] for e in self.alphabet} for s in temp_states},
-                e_delta={f"{s[0]}x{s[1]}": [] for s in temp_states},
+                # e_delta={f"{s[0]}x{s[1]}": [] for s in temp_states},
                 q0=f"{self.start}x{other.start}",
                 F={f"{s[0]}x{s[1]}" for s in temp_final})
     return result.minimize()
@@ -278,9 +284,9 @@ class DFA(FA):
     other = other.to_dfa()
     temp_states = set(product(self.states, other.states))
     result = DFA(Q={f"{s[0]}x{s[1]}" for s in temp_states},
-                alpha=self.alphabet.copy(),
+                sigma=self.alphabet.copy(),
                 delta={f"{s[0]}x{s[1]}": {e: [f"{self.transitions[s[0]][e][0]}x{other.transitions[s[1]][e][0]}"] for e in self.alphabet} for s in temp_states},
-                e_delta={f"{s[0]}x{s[1]}": [] for s in temp_states},
+                # e_delta={f"{s[0]}x{s[1]}": [] for s in temp_states},
                 q0=f"{self.start}x{other.start}",
                 F={f"{s[0]}x{s[1]}" for s in temp_states if (s[0] in self.final or s[1] in other.final)})
     return result.minimize()
@@ -330,13 +336,13 @@ class DFA(FA):
       inverted = {v: k for k,v in mapping.items()}
       new_states = {str(j) for j in range(i)}
       new_transitions = {q: {c: [inverted[transitions[mapping[q]][c][0]]] for c in self.alphabet} for q in new_states}
-      return DFA(new_states, 
-                 self.alphabet, 
-                 new_transitions, 
-                 {q: [] for q in new_states}, 
-                 inverted[start], 
-                 {q for q in new_states if mapping[q] in final}, 
-                 True)
+      return DFA(Q=new_states, 
+                 sigma=self.alphabet.copy(), 
+                 delta=new_transitions, 
+                #  {q: [] for q in new_states}, 
+                 q0=inverted[start], 
+                 F={q for q in new_states if mapping[q] in final}, 
+                 minimal=True)
     
     merge = {q: {r: (q in self.final) == (r in self.final) for r in self.states} for q in self.states}    
     next_a, next_b = find_next(merge)
@@ -372,6 +378,8 @@ class DFA(FA):
     
     transitions = {q: {c: [map_to_new[self.transitions[q][c][0]]] for c in self.alphabet} for q in old_states}
     transitions.update({q: {c: [map_to_new[self.transitions[[r for r in self.states if map_to_new[r] == q][0]][c][0]]] for c in self.alphabet} for q in merged_states})
+    for q in states:
+      transitions[q][''] = []
 
     final = {q for q in old_states if q in self.final}.union({s for s in merged_states if len({q for q in s if q in self.final}) > 0})
     start = map_to_new[self.start]
@@ -402,8 +410,8 @@ class NFA(FA):
     start (str): starting state id
     final (set): set of all final state ids
   """
-  def __init__(self, Q=None, Σ=set(), delta={}, e_delta=None, q0=None, F=set()):
-    super().__init__(Q, Σ, delta, e_delta, q0, F)
+  def __init__(self, Q=None, Σ=set(), delta={}, q0=None, F=set()):
+    super().__init__(Q, Σ, delta, q0, F)
     self.dfa = None
 
   def to_dfa(self):
@@ -412,7 +420,7 @@ class NFA(FA):
       return self.dfa
     
     def E(states):  
-      Q = states.union({r for q in states for r in self.e_transitions[q]})
+      Q = states.union({r for q in states for r in self.transitions[q]['']})
       if Q != states:
         Q = E(Q)
       return Q
@@ -444,11 +452,14 @@ class NFA(FA):
         transitions[s][c] = [i]
     states = set(ids.keys())
     final = {q for q in states if multi_is_final(ids[q])}
+
+    for q in states:
+      transitions[q][''] = []
     
     self.dfa = DFA(Q=states,
                alpha=self.alphabet.copy(),
                delta=transitions,
-               e_delta={state: [] for state in states},
+              #  e_delta={state: [] for state in states},
                q0='0',
                F=final)
     return self.dfa
@@ -464,17 +475,18 @@ class NFA(FA):
     Returns:
       A new NFA whose accepted langauge is the union of this NFA's and the given FA's accepted lanaguges.
     """
-    transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.alphabet} for q in self.states}
-    transitions.update({f"b{q}": {c: [f"b{r}" for r in other.transitions[q][c]] for c in other.alphabet} for q in other.states})
+    transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.sigma_alphabet} for q in self.states}
+    transitions.update({f"b{q}": {c: [f"b{r}" for r in other.transitions[q][c]] for c in other.sigma_alphabet} for q in other.states})
     transitions['0'] = {c: [] for c in self.alphabet}
-    e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
-    e_transitions.update({f"b{q}": [f"b{r}" for r in other.e_transitions[q]] for q in other.states})
-    e_transitions['0'] = [f"a{self.start}", f"b{other.start}"]
+    transitions['0'][''] = [f"a{self.start}", f"b{other.start}"]
+    # e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
+    # e_transitions.update({f"b{q}": [f"b{r}" for r in other.e_transitions[q]] for q in other.states})
+    # e_transitions['0'] = [f"a{self.start}", f"b{other.start}"]
     
     result = NFA(Q={'0'}.union({f"a{s}" for s in self.states}).union({f"b{s}" for s in other.states}),
                alpha=self.alphabet.copy(),
                delta=transitions,
-               e_delta=e_transitions,
+              #  e_delta=e_transitions,
                q0='0',
                F={f"a{s}" for s in self.final}.union({f"b{s}" for s in other.final}))
     return simplify_nfa(result)   
@@ -490,17 +502,18 @@ class NFA(FA):
     Returns:
       A new NFA whose accepted langauge is the concatenation of this NFA's and the given FA's accepted lanaguges.
     """
-    transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.alphabet} for q in self.states}
-    e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
-    transitions.update({f"b{q}": {c: [f"b{r}" for r in other.transitions[q][c]] for c in self.alphabet} for q in other.states})
-    e_transitions.update({f"b{q}": [f"b{r}" for r in other.e_transitions[q]] for q in other.states})
+    transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.sigma_alphabet} for q in self.states}
+    # e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
+    transitions.update({f"b{q}": {c: [f"b{r}" for r in other.transitions[q][c]] for c in other.sigma_alphabet} for q in other.states})
+    # e_transitions.update({f"b{q}": [f"b{r}" for r in other.e_transitions[q]] for q in other.states})
+    
     for s in self.final:
-      e_transitions[s].append(f"b{other.start}")
+      transitions[s][''].append(f"b{other.start}")
     
     result = NFA(Q={f"a{s}" for s in self.states}.union({f"b{s}" for s in other.states}),
                alpha=self.alphabet.copy(),
                delta=transitions,
-               e_delta=e_transitions,
+              #  e_delta=e_transitions,
                q0=f"a{self.start}",
                F={f"b{s}" for s in other.final})
     return simplify_nfa(result)
@@ -512,16 +525,16 @@ class NFA(FA):
     Returns:
       A new NFA whose accepted langauge is the kleene star of this NFA's lanaguge.
     """
-    transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.alphabet} for q in self.states}
-    e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
-    e_transitions['0'] = [f"a{self.start}"]
+    transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.sigma_alphabet} for q in self.states}
+    # e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
+    transitions['0'][''] = [f"a{self.start}"]
     for s in self.final:
-      e_transitions[s].append('0')
+      transitions[f"a{s}"][''].append('0')
     
     return NFA(Q={f"a{s}" for s in self.states}.union({'0'}),
                alpha=self.alphabet.copy(),
                delta=transitions,
-               e_delta=e_transitions,
+              #  e_delta=e_transitions,
                q0='0',
                F={f"a{s}" for s in self.final}.union({'0'}))
 
@@ -533,12 +546,12 @@ def simplify_nfa(automata):
         i += 1
       inverted = {v: k for k,v in mapping.items()}
       new_states = {str(j) for j in range(i)}
-      new_transitions = {q: {c: [inverted[automata.transitions[mapping[q]][c][0]]] for c in automata.alphabet} for q in new_states}
-      new_e_transitions = {q: [inverted[r] for r in automata.e_transitions[mapping[q]]] for q in new_states }
+      new_transitions = {q: {c: [inverted[r] for r in automata.transitions[mapping[q]][c]] for c in automata.sigma_alphabet} for q in new_states}
+      # new_e_transitions = {q: [inverted[r] for r in automata.e_transitions[mapping[q]]] for q in new_states }
       return NFA(new_states, 
                  automata.alphabet, 
                  new_transitions, 
-                 new_e_transitions, 
+                #  new_e_transitions, 
                  inverted[automata.start], 
                  {q for q in new_states if mapping[q] in automata.final})
     
@@ -703,10 +716,10 @@ def str_to_nfa(string, alphabet):
   start = '0'
   states = {str(i) for i in range(len(string)+1)}
   transitions = {state: {c: [] for c in alphabet} for state in states}
-  e_transitions = {state: [] for state in states}
+  # e_transitions = {state: [] for state in states}
   for i in range(len(string)):
     transitions[str(i)][string[i]] = [str(i+1)]
-  return NFA(Q=states, alpha=alphabet, delta=transitions, e_delta=e_transitions, q0=start, F=str(len(string)))
+  return NFA(Q=states, sigma=alphabet, delta=transitions, q0=start, F={str(len(string))})
 
 def guess_alphabet(s):
   """

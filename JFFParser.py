@@ -32,8 +32,8 @@ class JFFParser():
     start = parse_start(self.parse_tree)
     if start == None:
       raise AttributeError('no start state')
-    transitions, epsilon_transitions = parse_transitions(self.parse_tree, type, states, alphabet)
-    return DFA(Q=states, alpha=alphabet, delta=transitions, e_delta=epsilon_transitions, q0=start, F=final_states)
+    transitions = parse_transitions(self.parse_tree, type, states, alphabet)
+    return DFA(Q=states, sigma=alphabet, delta=transitions, q0=start, F=final_states)
 
   def generate_nfa(self):
     """
@@ -50,8 +50,8 @@ class JFFParser():
     start = parse_start(self.parse_tree)
     if start == None:
       raise AttributeError('no start state')
-    transitions, epsilon_transitions = parse_transitions(self.parse_tree, type, states, alphabet)
-    return NFA(Q=states, alpha=alphabet, delta=transitions, e_delta=epsilon_transitions, q0=start, F=final_states)
+    transitions = parse_transitions(self.parse_tree, type, states, alphabet)
+    return NFA(Q=states, sigma=alphabet, delta=transitions, q0=start, F=final_states)
 
   def generate_regex(self):
     """
@@ -195,14 +195,14 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
   delta = parse_tree.find_all('transition')
   if type == 'fa':
     transitions = {state: {c: [] for c in alphabet} for state in states}
-    epsilon_transitions = {state: [] for state in states}
+    # epsilon_transitions = {state: [] for state in states}
     for e in delta:
       read = e.find('read').string
       if read != None: 
         transitions[e.find('from').string][read].append(e.find('to').string)
       else: 
-        epsilon_transitions[e.find('from').string].append(e.find('to').string)
-    return transitions, epsilon_transitions
+        transitions[e.find('from').string][''].append(e.find('to').string)
+    return transitions
   elif type == 'pda':
     alphabet = alphabet.union({''})
     stack = alphabet.union({''})
