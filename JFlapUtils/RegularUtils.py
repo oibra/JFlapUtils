@@ -1,8 +1,8 @@
 from itertools import product
 from abc import ABC, abstractmethod
 import re # for regex
-from StringUtils import format_input, ε
-from CFUtils import CFG
+from JFlapUtils.StringUtils import format_input, ε
+from JFlapUtils.CFUtils import CFG
 
 class FA(ABC):
   """
@@ -222,11 +222,15 @@ class DFA(FA):
     for q in self.states:
       for c in self.alphabet:
         if len(self.transitions[q][c]) != 1:
-          return False, f"state {q} has {len(self.transitions[q][c])} transitions on symbol '{c}'"
+          err = f"state {q} has {len(self.transitions[q][c])} transitions on symbol '{c}'"
+          print(err)
+          return False, err
       # if len(self.e_transitions[q]) != 0:
       #   return False, f"state {q} has ε-transitions"
       if len(self.transitions[q]['']) != 0:
-        return False, f"state {q} has ε-transitions"
+        err = f"state {q} has ε-transitions"
+        print(err)
+        return False, err
     return True
   
   def to_dfa(self):

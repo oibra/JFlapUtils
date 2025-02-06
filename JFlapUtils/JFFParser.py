@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
-from RegularUtils import DFA, NFA, REGEX
-from CFUtils import CFG, PDA
-from TMUtils import TM, square
+from JFlapUtils.RegularUtils import DFA, NFA, REGEX
+from JFlapUtils.CFUtils import CFG, PDA
+from JFlapUtils.TMUtils import TM, square
 
 class JFFParser():
   """
