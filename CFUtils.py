@@ -1,4 +1,4 @@
-from JFlapUtils.StringUtils import format_input
+from StringUtils import format_input
 
 class CFG():
   """

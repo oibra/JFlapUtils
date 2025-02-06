@@ -1,7 +1,7 @@
 from bs4 import BeautifulSoup
-from JFlapUtils.RegularUtils import DFA, NFA, REGEX
-from JFlapUtils.CFUtils import CFG, PDA
-from JFlapUtils.TMUtils import TM, square
+from RegularUtils import DFA, NFA, REGEX
+from CFUtils import CFG, PDA
+from TMUtils import TM, square
 
 class JFFParser():
   """
@@ -121,13 +121,11 @@ def parse_alphabet(parse_tree, type):
   """
   alphabet = set()
   delta = parse_tree.find_all('transition')
-  if type == "fa" or type == 'pda' or type == 'turing':
-    for e in delta:
-      read = e.find('read').string
-      if read != None:
-        alphabet.add(read)
-  if type == 'turing':
-    for e in delta:
+  for e in delta:
+    read = e.find('read').string
+    if read != None:
+      alphabet.add(read)
+    if type == 'turing':
       write = e.find('write').string
       if write != None:
         alphabet.add(read)
@@ -193,18 +191,17 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
   Returns:
   """
   delta = parse_tree.find_all('transition')
+  alphabet = alphabet.union({''})
   if type == 'fa':
     transitions = {state: {c: [] for c in alphabet} for state in states}
     # epsilon_transitions = {state: [] for state in states}
     for e in delta:
-      read = e.find('read').string
-      if read != None: 
-        transitions[e.find('from').string][read].append(e.find('to').string)
-      else: 
-        transitions[e.find('from').string][''].append(e.find('to').string)
+      q = e.find('from').string
+      r = e.find('to').string
+      read = '' if e.find('read').string == None else e.find('read').string
+      transitions[q][read].append(r)
     return transitions
   elif type == 'pda':
-    alphabet = alphabet.union({''})
     stack = alphabet.union({''})
     transitions = {state: {c: {x: [] for x in stack} for c in alphabet} for state in states}
     for e in delta:
@@ -216,14 +213,12 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
       transitions[q][read][pop].append((r, push))
     return transitions
   elif type == 'turing':
-    alphabet = alphabet.union({square})
     transitions = {state: {c: None for c in alphabet} for state in states}
     for e in delta:
       q = e.find('from').string
       r = e.find('to').string
       read = square if e.find('read').string == None else e.find('read').string
-      write = e.find('write').string
-      write = square if read == None else write
+      write = square if e.find('write').string == None else e.find('write').string
       move = 1 if e.find('move').string == 'R' else -1
       transitions[q][read] = (r, write, move)
     return transitions

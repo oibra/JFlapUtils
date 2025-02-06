@@ -1,4 +1,4 @@
-ε = 'ε'
+epsilon = 'ε'
 
 def format_input(string):
   """
@@ -7,4 +7,4 @@ def format_input(string):
   Args:
     string (str)
   """
-  return string if len(string) > 0 else ε
+  return string if len(string) > 0 else epsilon
