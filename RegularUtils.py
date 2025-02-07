@@ -4,6 +4,8 @@ import re # for regex
 from StringUtils import format_input, epsilon
 from CFUtils import CFG
 
+import time
+
 class FA(ABC):
   """
   Superclass for representing a finite automata (DFA or NFA)
@@ -34,13 +36,9 @@ class FA(ABC):
       q0 = '0'
       F = set()
       delta = {'0': {c: [] for c in Σ}}
-      # e_delta = {'0': []}
-    # elif e_delta == None:
-    #   e_delta = {q: [] for q in Q}
     self.states = Q
     self.alphabet = sigma
     self.transitions = delta
-    # self.e_transitions = e_delta
     self.start = q0
     self.final = F 
     self.sigma_alphabet = self.alphabet.union({''})
@@ -90,7 +88,7 @@ class FA(ABC):
     print("final states:", self.final)
     print("transitions:")
     for s in self.states:
-      print("\t",s,":",self.transitions[s]) # ,ε,":",self.e_transitions[s])
+      print("\t",s,":",self.transitions[s]) 
 
   def is_empty(self):
     """
@@ -108,9 +106,7 @@ class FA(ABC):
       if next in self.final:
         return False
       else:
-        # to_visit.extend([q for q in self.e_transitions[next] if q not in visited])
-        # to_visit.extend([q for e in self.alphabet for q in self.transitions[next][e] if q not in visited])
-        to_visit.extend([q for e in self.sigma_alphabet for q in self.transitions[next][e] if q not in visited])
+        to_visit.update([q for e in self.sigma_alphabet for q in self.transitions[next][e] if q not in visited])
     return True
 
   def equals(self, other):
@@ -155,10 +151,6 @@ class FA(ABC):
       else:
         paths.update({q: f"{paths[next]}{e}" for e in c.sigma_alphabet for q in c.transitions[next][e] if q not in paths.keys()})
         to_visit.update([q for e in c.sigma_alphabet for q in c.transitions[next][e] if q not in visited])
-        # paths.update({q: f"{paths[next]}{e}" for e in c.alphabet for q in c.transitions[next][e] if q not in paths.keys()})
-        # to_visit.update([q for e in c.alphabet for q in c.transitions[next][e] if q not in visited])
-        # paths.update({q: paths[next] for q in c.e_transitions[next] if q not in paths.keys()})
-        # to_visit.update([q for q in c.e_transitions[next] if q not in visited])
     return None
 
 
@@ -225,8 +217,6 @@ class DFA(FA):
           err = f"state {q} has {len(self.transitions[q][c])} transitions on symbol '{c}'"
           print(err)
           return False, err
-      # if len(self.e_transitions[q]) != 0:
-      #   return False, f"state {q} has ε-transitions"
       if len(self.transitions[q]['']) != 0:
         err = f"state {q} has ε-transitions"
         print(err)
@@ -247,7 +237,6 @@ class DFA(FA):
     return DFA(Q=self.states.copy(), 
             sigma=self.alphabet.copy(),
             delta=self.transitions.copy(),
-            # e_delta=self.e_transitions.copy(),
             q0=self.start,
             F=self.states.difference(self.final),
             minimal=self.minimal)
@@ -272,7 +261,6 @@ class DFA(FA):
     result = DFA(Q={f"{s[0]}x{s[1]}" for s in temp_states},
                 sigma=self.alphabet.copy(),
                 delta=transitions,
-                # e_delta={f"{s[0]}x{s[1]}": [] for s in temp_states},
                 q0=f"{self.start}x{other.start}",
                 F={f"{s[0]}x{s[1]}" for s in temp_final})
     return result.minimize()
@@ -296,7 +284,6 @@ class DFA(FA):
     result = DFA(Q={f"{s[0]}x{s[1]}" for s in temp_states},
                 sigma=self.alphabet.copy(),
                 delta=transitions,
-                # e_delta={f"{s[0]}x{s[1]}": [] for s in temp_states},
                 q0=f"{self.start}x{other.start}",
                 F={f"{s[0]}x{s[1]}" for s in temp_states if (s[0] in self.final or s[1] in other.final)})
     return result.minimize()
@@ -352,7 +339,6 @@ class DFA(FA):
       return DFA(Q=new_states, 
                  sigma=self.alphabet.copy(), 
                  delta=new_transitions, 
-                #  {q: [] for q in new_states}, 
                  q0=inverted[start], 
                  F={q for q in new_states if mapping[q] in final}, 
                  minimal=True)
@@ -472,7 +458,6 @@ class NFA(FA):
     self.dfa = DFA(Q=states,
                sigma=self.alphabet.copy(),
                delta=transitions,
-              #  e_delta={state: [] for state in states},
                q0='0',
                F=final)
     return self.dfa
@@ -492,14 +477,10 @@ class NFA(FA):
     transitions.update({f"b{q}": {c: [f"b{r}" for r in other.transitions[q][c]] for c in other.sigma_alphabet} for q in other.states})
     transitions['0'] = {c: [] for c in self.alphabet}
     transitions['0'][''] = [f"a{self.start}", f"b{other.start}"]
-    # e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
-    # e_transitions.update({f"b{q}": [f"b{r}" for r in other.e_transitions[q]] for q in other.states})
-    # e_transitions['0'] = [f"a{self.start}", f"b{other.start}"]
     
     result = NFA(Q={'0'}.union({f"a{s}" for s in self.states}).union({f"b{s}" for s in other.states}),
                sigma=self.alphabet.copy(),
                delta=transitions,
-              #  e_delta=e_transitions,
                q0='0',
                F={f"a{s}" for s in self.final}.union({f"b{s}" for s in other.final}))
     return simplify_nfa(result)   
@@ -516,17 +497,14 @@ class NFA(FA):
       A new NFA whose accepted langauge is the concatenation of this NFA's and the given FA's accepted lanaguges.
     """
     transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.sigma_alphabet} for q in self.states}
-    # e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
     transitions.update({f"b{q}": {c: [f"b{r}" for r in other.transitions[q][c]] for c in other.sigma_alphabet} for q in other.states})
-    # e_transitions.update({f"b{q}": [f"b{r}" for r in other.e_transitions[q]] for q in other.states})
     
     for s in self.final:
-      transitions[s][''].append(f"b{other.start}")
+      transitions[f"a{s}"][''].append(f"b{other.start}")
     
     result = NFA(Q={f"a{s}" for s in self.states}.union({f"b{s}" for s in other.states}),
                sigma=self.alphabet.copy(),
                delta=transitions,
-              #  e_delta=e_transitions,
                q0=f"a{self.start}",
                F={f"b{s}" for s in other.final})
     return simplify_nfa(result)
@@ -539,7 +517,7 @@ class NFA(FA):
       A new NFA whose accepted langauge is the kleene star of this NFA's lanaguge.
     """
     transitions = {f"a{q}": {c: [f"a{r}" for r in self.transitions[q][c]] for c in self.sigma_alphabet} for q in self.states}
-    # e_transitions = {f"a{q}": [f"a{r}" for r in self.e_transitions[q]] for q in self.states}
+    transitions['0'] = {c: [] for c in self.sigma_alphabet}
     transitions['0'][''] = [f"a{self.start}"]
     for s in self.final:
       transitions[f"a{s}"][''].append('0')
@@ -547,7 +525,6 @@ class NFA(FA):
     return NFA(Q={f"a{s}" for s in self.states}.union({'0'}),
                sigma=self.alphabet.copy(),
                delta=transitions,
-              #  e_delta=e_transitions,
                q0='0',
                F={f"a{s}" for s in self.final}.union({'0'}))
 
@@ -560,16 +537,14 @@ def simplify_nfa(automata):
       inverted = {v: k for k,v in mapping.items()}
       new_states = {str(j) for j in range(i)}
       new_transitions = {q: {c: [inverted[r] for r in automata.transitions[mapping[q]][c]] for c in automata.sigma_alphabet} for q in new_states}
-      # new_e_transitions = {q: [inverted[r] for r in automata.e_transitions[mapping[q]]] for q in new_states }
       return NFA(new_states, 
                  automata.alphabet, 
                  new_transitions, 
-                #  new_e_transitions, 
                  inverted[automata.start], 
                  {q for q in new_states if mapping[q] in automata.final})
     
 
-REGEX_ALPHABET = "()*|"
+REGEX_ALPHABET = f"()*|{epsilon}"
 REGEX_REPLACE = {"+": "|", "!": epsilon}
 
 class REGEX:
@@ -591,12 +566,18 @@ class REGEX:
     for sym in REGEX_REPLACE.keys():
       self.string = self.string.replace(sym, REGEX_REPLACE[sym])
     if alphabet == None:
-      self.alphabet = guess_alphabet(self.string)
+      self.alphabet = guess_alphabet(string)
     else:
       self.alphabet = alphabet
-
     self.pattern = re.compile(f"^{self.string}$")
     self.nfa = None
+    self.nfa = self.to_nfa()
+  
+  def __str__(self):
+    return self.string
+  
+  def __repr__(self):
+    return self.string
 
   def generate_grammar(self):
     """
@@ -609,11 +590,29 @@ class REGEX:
     variables = {"<RE>", "<CONCAT>", "<STAR>", "<GROUP>", "<TERM>"}
     terminals = {"*", "|", "(", ")", epsilon}
     terminals.update(self.alphabet)
-    rules = {"<RE>": [["<CONCAT>"], ["CONCAT", "|", "<RE>"]],
-             "<CONCAT>": [["<STAR>"], ["<STAR>", "<CONCAT>"]],
-             "<STAR>": [["<GROUP>"], ["<GROUP>", "*"]],
-             "<GROUP>": [["<TERM>"], ["(", "<RE>", ")"]],
-             "<TERM>": [[epsilon]].extend([[c] for c in self.alphabet])}
+    term_rules = [[c] for c in self.alphabet]
+    term_rules.append([epsilon])
+    term_rules.append(["(", "<RE>", ")"])
+
+    star_rules = term_rules.copy()
+    star_rules.append(["<GROUP>", "*"])
+
+    concat_rules = star_rules.copy()
+    concat_rules.append(["<STAR>", "<CONCAT>"])
+
+    union_rules = concat_rules.copy()
+    union_rules.append(["<CONCAT>", "|", "<RE>"])
+
+    # r_rules = [['CONCAT', '|', 'RE'], ['STAR', 'CONCAT']]
+    # rules = {"<RE>": [["<CONCAT>"], ["<CONCAT>", "|", "<RE>"]],
+    #          "<CONCAT>": [["<STAR>"], ["<STAR>", "<CONCAT>"]],
+    #          "<STAR>": [["<GROUP>"], ["<GROUP>", "*"]],
+    #          "<GROUP>": [["<TERM>"], ["(", "<RE>", ")"]],
+    #          "<TERM>": term_rules}
+    rules = {"<RE>": [["<CONCAT>"], ["<CONCAT>", "|", "<RE>"]],
+             "<CONCAT>": concat_rules,
+             "<STAR>": star_rules,
+             "<GROUP>": term_rules}
 
     return CFG(S=start, alpha=terminals, V=variables,R=rules)
 
@@ -641,7 +640,7 @@ class REGEX:
     Returns:
       True if the given string is generated by this regular expression, False otherwise
     """
-    return self.pattern.fullmatch(input)
+    return self.pattern.fullmatch(input) != None
   
   def test(self, input, expected=True):
     """
@@ -695,23 +694,39 @@ def tree_to_nfa(node, alphabet):
       case "<RE>":
         if len(node.children) == 1:
           return tree_to_nfa(node.children[0], alphabet)
-        else:
-          left = tree_to_nfa(node.children[0], alphabet)
-          right = tree_to_nfa(node.children[2], alphabet)
-          return left.union(right)
-      case "<CONCAT>":
-        if len(node.children) == 1:
-          return tree_to_nfa(node.children[0], alphabet)
-        else:
+        elif len(node.children) == 2 and node.children[1] == '*':
+          m = tree_to_nfa(node.children[0], alphabet)
+          return m.star()
+        elif len(node.children) == 2:
           left = tree_to_nfa(node.children[0], alphabet)
           right = tree_to_nfa(node.children[1], alphabet)
           return left.concat(right)
+        elif len(node.children) == 3 and node.children[1] == '|':
+          left = tree_to_nfa(node.children[0], alphabet)
+          right = tree_to_nfa(node.children[2], alphabet)
+          return left.union(right)
+        elif len(node.children) == 3:
+          return tree_to_nfa(node.children[1], alphabet)
+      case "<CONCAT>":
+        if len(node.children) == 1:
+          return tree_to_nfa(node.children[0], alphabet)
+        elif len(node.children) == 2 and node.children[1] == '*':
+          m = tree_to_nfa(node.children[0], alphabet)
+          return m.star()
+        elif len(node.children) == 2:
+          left = tree_to_nfa(node.children[0], alphabet)
+          right = tree_to_nfa(node.children[1], alphabet)
+          return left.concat(right)
+        elif len(node.children) == 3:
+          return tree_to_nfa(node.children[1], alphabet)
       case "<STAR>":
         if len(node.children) == 1:
           return tree_to_nfa(node.children[0], alphabet)
-        else:
+        elif len(node.children) == 2:
           m = tree_to_nfa(node.children[0], alphabet)
           return m.star()
+        elif len(node.children) == 3:
+          return tree_to_nfa(node.children[1], alphabet)
       case "<GROUP>":
         if len(node.children) == 1:
           return tree_to_nfa(node.children[0], alphabet)
@@ -733,11 +748,10 @@ def str_to_nfa(string, alphabet):
   """
   start = '0'
   if string == epsilon:
-    return NFA(Q={start}, sigma=alphabet, delta={'0': {c: [] for c in alphabet}}, q0=start, F={start})
+    return NFA(Q={start}, sigma=alphabet, delta={'0': {c: [] for c in alphabet.union({''})}}, q0=start, F={start})
   else:
     states = {str(i) for i in range(len(string)+1)}
-    transitions = {state: {c: [] for c in alphabet} for state in states}
-    # e_transitions = {state: [] for state in states}
+    transitions = {state: {c: [] for c in alphabet.union({''})} for state in states}
     for i in range(len(string)):
       transitions[str(i)][string[i]] = [str(i+1)]
     return NFA(Q=states, sigma=alphabet, delta=transitions, q0=start, F={str(len(string))})
@@ -750,46 +764,56 @@ def guess_alphabet(s):
   for i in range(len(s)):
     if s[i] not in "()*+!":
       alphabet.add(s[i])
-  return s
+  return alphabet
 
 if __name__ == "__main__":
-  print('dfa test')
-  d = DFA(Q={str(i) for i in range(7)}, sigma={'a', 'b'}, 
-          delta={'0': {'a': ['1'], 'b': ['2'], '': []},
-                 '1': {'a': ['3'], 'b': ['4'], '': []},
-                 '2': {'a': ['6'], 'b': ['5'], '': []},
-                 '3': {'a': ['3'], 'b': ['4'], '': []},
-                 '4': {'a': ['3'], 'b': ['4'], '': []},
-                 '5': {'a': ['6'], 'b': ['5'], '': []},
-                 '6': {'a': ['6'], 'b': ['5'], '': []}},
-                 q0='0', F={'1', '2', '3', '5'})
-  for s in ['a', 'b', 'abba', 'bababab']:
-    print(d.test(s))
-  for s in ['', 'baaa', 'abab']:
-    print(d.test(s, False))
+  print('testing regex')
+  t = time.time()
+  r1 = REGEX('1*(011*)*')
+  print("r1 generated in", time.time() - t, "seconds")
+  t = time.time()
+  r2 = REGEX('(1+01)*')
+  print("r2 generated in", time.time() - t, "seconds")
+  t = time.time()
+  r3 = REGEX('1*((0+!)1)*')
+  print("r3 generated in", time.time() - t, "seconds")
+  t = time.time()
+  r4 = REGEX('(01+1*)*')
+  print("r4 generated in", time.time() - t, "seconds")
 
-  print()
-  print('test nfa')
-  n = NFA(Q={str(i) for i in range(6)}, sigma={'a', 'b'},
-          delta={'0': {'a': ['1'], 'b': ['2'], '': []},
-                 '1': {'a': [], 'b': [], '': ['3']},
-                 '2': {'a': [], 'b': [], '': ['4']},
-                 '3': {'a': ['3', '5'], 'b': ['3'], '': []},
-                 '4': {'a': ['4'], 'b': ['4', '5'], '': []},
-                 '5': {'a': [], 'b': [], '': []}},
-                 q0='0', F={'1', '2', '5'})
-  for s in ['a', 'b', 'abba', 'bababab']:
-    print(n.test(s))
-  for s in ['', 'baaa', 'abab']:
-    print(n.test(s, False))
-  print(n.find_difference(d))
+  # t = time.time()
+  # n1 = r1.to_nfa()
+  # print('nfa 1 generated in', time.time() - t, "seconds")
 
-  # r1 = REGEX()
-  # for s in []:
-  #   print(r1.test())
-  # for s in []:
-  #   print(r1.test(), False)
+  # t = time.time()
+  # n2 = r2.to_nfa()
+  # print('nfa 2 generated in', time.time() - t, "seconds")
 
-  # r2 = REGEX()
-  # print(r1.equals(r2))
+  # t = time.time()
+  # x = n1.equals(n2)
+  # print('nfa equality in', time.time() - t, "seconds")
+
+  t = time.time()
+  print(r1.equals(r2))
+  print('regex equality in', time.time() - t, "seconds")
+
+  t = time.time()
+  print(r1.equals(r3))
+  print('regex equality in', time.time() - t, "seconds")
+
+  t = time.time()
+  print(r1.equals(r4))
+  print('regex equality in', time.time() - t, "seconds")
+
+  t = time.time()
+  print(r2.equals(r3))
+  print('regex equality in', time.time() - t, "seconds")
+
+  t = time.time()
+  print(r2.equals(r4))
+  print('regex equality in', time.time() - t, "seconds")
+
+  t = time.time()
+  print(r3.equals(r4))
+  print('regex equality in', time.time() - t, "seconds")
   

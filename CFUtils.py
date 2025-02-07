@@ -32,26 +32,46 @@ class CFG():
     def __init__(self, symbol, terminal=False):
       self.string = symbol
       self.is_terminal = terminal
-      self.children = []
+      self.children = list()
 
-    def string(self):
+    def __str__(self):
+      return f"({self.string}, {[str(child) for child in self.children]})"
+    
+    def __repr__(self):
+      return f"({self.string}, {[child for child in self.children]})"
+
+    def to_string(self):
       """"""
       if self.is_terminal: return self.string
-      elif len(self.children == 0): return None
+      elif len(self.children) == 0: return None
       else:
-        s = [child.string() for child in self.children]
+        s = [child.to_string() for child in self.children]
         if None in s: return None
         else: return ''.join(s)
+
+    def find_unexplored(self, v):
+      if self.is_terminal: return None
+      elif len(self.children) == 0 and self.string == v: return self
+      else:
+        for child in self.children:
+          n = child.find_unexplored(v)
+          if n != None: return n
+        return None
 
     def first_var_leaf(self):
       """"""
       if self.is_terminal: return None
-      elif len(self.children == 0): return self
+      elif len(self.children) == 0: return self
       else:
         for child in self.children:
           n = child.first_var_leaf()
           if n != None: return n
         return None
+    
+    def copy(self):
+      copy = CFG.Node(self.string, self.is_terminal)
+      copy.children = [child.copy() for child in self.children]
+      return copy
 
   def to_cnf(self):
     """
@@ -61,12 +81,10 @@ class CFG():
     """
     if self.cnf != None:
       return self.cnf
-    
     variables = self.variables.copy()
     start = f"{self.start}0"
     variables.add(start)
     rules = {start: [[self.start]]}
-    
     # BIN
     for v in self.variables:
       rules[v] = [rule for rule in self.rules[v] if len(rule) <= 2]
@@ -87,7 +105,6 @@ class CFG():
           rules[newv] = [newrule]
     # DEL
     del_queue = [v for v in variables if [] in rules[v]]
-    
     deleted = []
     while len(del_queue) > 0:
       v = del_queue.pop()
@@ -111,7 +128,6 @@ class CFG():
         if [] in newrules and n not in del_queue and n != start:
           del_queue.push(n)
         rules[n].extend(newrules)
-
     # UNIT
     for v in variables:
       unit_rules = [r for r in rules[v] if len(r) == 1 and r[0] in variables]
@@ -121,18 +137,18 @@ class CFG():
         rules[v].extend(rules[unit[0]])
         if [v] in rules[v]: rules[v].remove([v])
         unit_rules = [r for r in rules[v] if len(r) == 1 and r[0] in variables]
-
     # TERM
     alpha = ''.join(self.alphabet)
     term = [alpha.index(c) for c in self.alphabet]
-    rules.update({c: [alpha[c]] for c in term})
+    rules.update({f"V{c}": [alpha[c]] for c in term})
     for v in variables:
       for rule in rules[v]:
         if len(rule) == 2:
           if rule[0] in self.alphabet:
-            rule[0] = alpha.index(rule[0])
+            rule[0] = f"V{alpha.index(rule[0])}"
           if rule[1] in self.alphabet:
-            rule[1] = alpha.index(rule[1])
+            rule[1] = f"V{alpha.index(rule[1])}"
+    variables.update(f"V{c}" for c in term)
 
     self.cnf = CFG(start, self.alphabet, variables, rules, True)
     return self.cnf
@@ -167,7 +183,9 @@ class CFG():
     """
     cnf = self.to_cnf()
     if input == "": return [] in cnf.rules[cnf.start]
-    else: return input in generate(cnf, [cnf.start], len(input))
+    else: 
+      find, _ = cnf.generate(self.Node(cnf.start), input, [cnf.start])
+      return find
   
   def parse_tree(self, input):
     """
@@ -178,23 +196,36 @@ class CFG():
 
     Returns:
     """
-    # recursive helper function
-    def generate_tree(input, root):
-      if root.string() == input: return True
-      elif root.string() != None: return False
-      else:
-        next = root.first_var_leaf()
-        for rule in self.rules[next.string]:
-          next.children = [self.Node(r, r not in self.variables) for r in rule]
-          check = generate_tree(input, root)
-          if check: return True
-      return False
+    if input != "":
+      find, tree = self.generate(input, self.Node(self.start), [self.start])
+      if find:
+        return tree
+    return None
   
-    if self.read(input):
-      start = self.Node(self.start)
-      generate_tree(input, start)
-      return start
-    else: return None
+  def generate(self, goal, root, phrase):
+    # V = [var for var in phrase if var in self.variables]
+    V = None
+    for sym in phrase:
+      if sym in self.variables:
+        V = sym
+        break
+
+    if V == None and len(phrase) == len(goal):
+      p = ''.join(phrase)
+      return (p == goal), root.copy()
+    elif len(phrase) <= len(goal) and V != None:
+      curr = root.find_unexplored(V)
+      for rule in self.rules[V]:
+        if len(rule) + len(phrase) - 1 <= len(goal):
+          terms = [c for c in rule if c not in self.variables and phrase.count(c) >= goal.count(c)]
+          if len(terms) == 0:
+            newphrase = replace(phrase, V, rule)
+            curr.children = [CFG.Node(child, child not in self.variables) for child in rule]
+            find, tree = self.generate(goal, root, newphrase)
+            if find:  
+              return find, tree
+            curr.children = []
+    return False, root
 
 class PDA():
   """"""
@@ -257,20 +288,30 @@ class PDA():
     return False
           
 
-def generate(cfg, phrase=[], length=0):
-  V = [var for var in phrase if var in cfg.variables]
-  if len(V) == 0 and len(phrase) == length:
-    return ''.join(phrase)
-  else:
-    phrases = set()
-    if len(phrase) <= length and len(V) > 0:
-      next = V[0]
-      for rule in cfg.rules[next]:
-        newphrase = replace(phrase, next, rule)
-        phrases.update(generate(cfg, newphrase, length))
-    return phrases
+# def generate(cfg, phrase=[], goal="", root=None):
+#   V = [var for var in phrase if var in cfg.variables]
+#   if len(V) == 0 and len(phrase) == len(goal):
+#     p = ''.join(phrase)
+#     return p == goal, root.copy()
+#     # return {p}, {p: root.copy()}
+#   else:
+#     # phrases = set()
+#     # trees = dict()
+#     if len(phrase) <= len(goal) and len(V) > 0:
+#       next = V[0]
+#       curr = root.find_unexplored(next)
+#       for rule in cfg.rules[next]:
+#         newphrase = replace(phrase, next, rule)
+#         curr.children = [CFG.Node(child, child not in cfg.variables) for child in rule]
+#         find, tree = generate(cfg, newphrase, goal, root)
+#         if find:
+#           return find, tree
+#         # phrases.update(final_phrases)
+#         # trees.update(final_trees)
+#         curr.children = []
+#     return False, root
   
-def replace(phrase, var, rule, all=False):
+def replace(phrase, var, rule):
   newphrase = phrase.copy()
   index = phrase.index(var)
   newphrase.pop(index)
