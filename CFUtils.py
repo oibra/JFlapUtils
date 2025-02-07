@@ -1,4 +1,4 @@
-from StringUtils import format_input
+from StringUtils import format_input, replace
 
 class CFG():
   """
@@ -198,12 +198,10 @@ class CFG():
     """
     if input != "":
       find, tree = self.generate(input, self.Node(self.start), [self.start])
-      if find:
-        return tree
+      if find: return tree
     return None
   
   def generate(self, goal, root, phrase):
-    # V = [var for var in phrase if var in self.variables]
     V = None
     for sym in phrase:
       if sym in self.variables:
@@ -286,35 +284,3 @@ class PDA():
         if s != '': stack.pop()
       stack.append(x)
     return False
-          
-
-# def generate(cfg, phrase=[], goal="", root=None):
-#   V = [var for var in phrase if var in cfg.variables]
-#   if len(V) == 0 and len(phrase) == len(goal):
-#     p = ''.join(phrase)
-#     return p == goal, root.copy()
-#     # return {p}, {p: root.copy()}
-#   else:
-#     # phrases = set()
-#     # trees = dict()
-#     if len(phrase) <= len(goal) and len(V) > 0:
-#       next = V[0]
-#       curr = root.find_unexplored(next)
-#       for rule in cfg.rules[next]:
-#         newphrase = replace(phrase, next, rule)
-#         curr.children = [CFG.Node(child, child not in cfg.variables) for child in rule]
-#         find, tree = generate(cfg, newphrase, goal, root)
-#         if find:
-#           return find, tree
-#         # phrases.update(final_phrases)
-#         # trees.update(final_trees)
-#         curr.children = []
-#     return False, root
-  
-def replace(phrase, var, rule):
-  newphrase = phrase.copy()
-  index = phrase.index(var)
-  newphrase.pop(index)
-  for i in range(len(rule)):
-    newphrase.insert(index+i, rule[i])
-  return newphrase

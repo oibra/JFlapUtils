@@ -1,10 +1,12 @@
 from itertools import product
 from abc import ABC, abstractmethod
-import re # for regex
-from StringUtils import format_input, epsilon
+from StringUtils import format_input, epsilon, guess_alphabet
 from CFUtils import CFG
+import re
 
-import time
+
+REGEX_ALPHABET = f"()*|{epsilon}"
+REGEX_REPLACE = {"+": "|", "!": epsilon}
 
 class FA(ABC):
   """
@@ -526,26 +528,7 @@ class NFA(FA):
                sigma=self.alphabet.copy(),
                delta=transitions,
                q0='0',
-               F={f"a{s}" for s in self.final}.union({'0'}))
-
-def simplify_nfa(automata):
-      mapping = {}
-      i = 0
-      for q in automata.states:
-        mapping[str(i)] = q
-        i += 1
-      inverted = {v: k for k,v in mapping.items()}
-      new_states = {str(j) for j in range(i)}
-      new_transitions = {q: {c: [inverted[r] for r in automata.transitions[mapping[q]][c]] for c in automata.sigma_alphabet} for q in new_states}
-      return NFA(new_states, 
-                 automata.alphabet, 
-                 new_transitions, 
-                 inverted[automata.start], 
-                 {q for q in new_states if mapping[q] in automata.final})
-    
-
-REGEX_ALPHABET = f"()*|{epsilon}"
-REGEX_REPLACE = {"+": "|", "!": epsilon}
+               F={f"a{s}" for s in self.final}.union({'0'}))    
 
 class REGEX:
   """
@@ -566,7 +549,7 @@ class REGEX:
     for sym in REGEX_REPLACE.keys():
       self.string = self.string.replace(sym, REGEX_REPLACE[sym])
     if alphabet == None:
-      self.alphabet = guess_alphabet(string)
+      self.alphabet = guess_alphabet(self.string, REGEX_ALPHABET)
     else:
       self.alphabet = alphabet
     self.pattern = re.compile(f"^{self.string}$")
@@ -588,31 +571,16 @@ class REGEX:
     """
     start = "<RE>"
     variables = {"<RE>", "<CONCAT>", "<STAR>", "<GROUP>", "<TERM>"}
-    terminals = {"*", "|", "(", ")", epsilon}
-    terminals.update(self.alphabet)
+    terminals = {"*", "|", "(", ")", epsilon} | self.alphabet
     term_rules = [[c] for c in self.alphabet]
-    term_rules.append([epsilon])
-    term_rules.append(["(", "<RE>", ")"])
-
-    star_rules = term_rules.copy()
-    star_rules.append(["<GROUP>", "*"])
-
-    concat_rules = star_rules.copy()
-    concat_rules.append(["<STAR>", "<CONCAT>"])
-
-    union_rules = concat_rules.copy()
-    union_rules.append(["<CONCAT>", "|", "<RE>"])
-
-    # r_rules = [['CONCAT', '|', 'RE'], ['STAR', 'CONCAT']]
-    # rules = {"<RE>": [["<CONCAT>"], ["<CONCAT>", "|", "<RE>"]],
-    #          "<CONCAT>": [["<STAR>"], ["<STAR>", "<CONCAT>"]],
-    #          "<STAR>": [["<GROUP>"], ["<GROUP>", "*"]],
-    #          "<GROUP>": [["<TERM>"], ["(", "<RE>", ")"]],
-    #          "<TERM>": term_rules}
-    rules = {"<RE>": [["<CONCAT>"], ["<CONCAT>", "|", "<RE>"]],
+    group_rules = term_rules + [[epsilon], ["(", "<RE>", ")"]]
+    star_rules = term_rules + [[epsilon], ["(", "<RE>", ")"], ["<GROUP>", "*"]]
+    concat_rules = term_rules + [[epsilon], ["(", "<RE>", ")"], ["<GROUP>", "*"], ["<STAR>", "<CONCAT>"]]
+    union_rules = term_rules + [[epsilon], ["(", "<RE>", ")"], ["<GROUP>", "*"], ["<STAR>", "<CONCAT>"], ["<CONCAT>", "|", "<RE>"]]
+    rules = {"<RE>": union_rules,
              "<CONCAT>": concat_rules,
              "<STAR>": star_rules,
-             "<GROUP>": term_rules}
+             "<GROUP>": group_rules}
 
     return CFG(S=start, alpha=terminals, V=variables,R=rules)
 
@@ -676,6 +644,21 @@ class REGEX:
       self.nfa = tree_to_nfa(parse_tree, self.alphabet)
       return self.nfa
 
+def simplify_nfa(automata):
+      mapping = {}
+      i = 0
+      for q in automata.states:
+        mapping[str(i)] = q
+        i += 1
+      inverted = {v: k for k,v in mapping.items()}
+      new_states = {str(j) for j in range(i)}
+      new_transitions = {q: {c: [inverted[r] for r in automata.transitions[mapping[q]][c]] for c in automata.sigma_alphabet} for q in new_states}
+      return NFA(new_states, 
+                 automata.alphabet, 
+                 new_transitions, 
+                 inverted[automata.start], 
+                 {q for q in new_states if mapping[q] in automata.final})
+
 def tree_to_nfa(node, alphabet):
   """
   Converts the given regular expression AST to an equivalent NFA
@@ -732,8 +715,6 @@ def tree_to_nfa(node, alphabet):
           return tree_to_nfa(node.children[0], alphabet)
         else:
           return tree_to_nfa(node.children[1], alphabet)
-      case "<TERM>":
-        return tree_to_nfa(node.children[0], alphabet)
 
 def str_to_nfa(string, alphabet):
   """
@@ -756,64 +737,4 @@ def str_to_nfa(string, alphabet):
       transitions[str(i)][string[i]] = [str(i+1)]
     return NFA(Q=states, sigma=alphabet, delta=transitions, q0=start, F={str(len(string))})
 
-def guess_alphabet(s):
-  """
-  Attempts to determine the alphabet the given regular expression is defined over.
-  """
-  alphabet = set()
-  for i in range(len(s)):
-    if s[i] not in "()*+!":
-      alphabet.add(s[i])
-  return alphabet
-
-if __name__ == "__main__":
-  print('testing regex')
-  t = time.time()
-  r1 = REGEX('1*(011*)*')
-  print("r1 generated in", time.time() - t, "seconds")
-  t = time.time()
-  r2 = REGEX('(1+01)*')
-  print("r2 generated in", time.time() - t, "seconds")
-  t = time.time()
-  r3 = REGEX('1*((0+!)1)*')
-  print("r3 generated in", time.time() - t, "seconds")
-  t = time.time()
-  r4 = REGEX('(01+1*)*')
-  print("r4 generated in", time.time() - t, "seconds")
-
-  # t = time.time()
-  # n1 = r1.to_nfa()
-  # print('nfa 1 generated in', time.time() - t, "seconds")
-
-  # t = time.time()
-  # n2 = r2.to_nfa()
-  # print('nfa 2 generated in', time.time() - t, "seconds")
-
-  # t = time.time()
-  # x = n1.equals(n2)
-  # print('nfa equality in', time.time() - t, "seconds")
-
-  t = time.time()
-  print(r1.equals(r2))
-  print('regex equality in', time.time() - t, "seconds")
-
-  t = time.time()
-  print(r1.equals(r3))
-  print('regex equality in', time.time() - t, "seconds")
-
-  t = time.time()
-  print(r1.equals(r4))
-  print('regex equality in', time.time() - t, "seconds")
-
-  t = time.time()
-  print(r2.equals(r3))
-  print('regex equality in', time.time() - t, "seconds")
-
-  t = time.time()
-  print(r2.equals(r4))
-  print('regex equality in', time.time() - t, "seconds")
-
-  t = time.time()
-  print(r3.equals(r4))
-  print('regex equality in', time.time() - t, "seconds")
   
