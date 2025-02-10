@@ -6,10 +6,10 @@ Originally designed for use in autograders at the University of Illinois at Chic
 Currently supported:
 - Finite Automata (DFAs and NFAs)
   - test input strings
-  - test for equalty
-  - find differences between automata
+  - ~test for equalty~
+  - ~find differences between automata~
   - NFA to DFA conversion
-  - DFA Minimization
+  - ~DFA Minimization~
 - Regular Expressions
   - test input strings
   - test for equality
