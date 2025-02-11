@@ -124,7 +124,8 @@ class FA(ABC):
     """
     this = self.to_dfa().minimize()
     that = other.to_dfa().minimize()
-    c = this.minus(that).union(that.minus(this))
+    # c = this.minus(that).union(that.minus(this))
+    c = this.symmetric_difference(that)
     return c.is_empty()
   
   def find_difference(self, other):
@@ -140,7 +141,8 @@ class FA(ABC):
     """
     this = self.to_dfa().minimize()
     that = other.to_dfa().minimize()
-    c = this.minus(that).union(that.minus(this))
+    # c = this.minus(that).union(that.minus(this))
+    c = this.symmetric_difference(that)
 
     visited = set()
     to_visit = {c.start}
@@ -260,12 +262,13 @@ class DFA(FA):
     transitions = {f"{s[0]}x{s[1]}": {c: [f"{self.transitions[s[0]][c][0]}x{other.transitions[s[1]][c][0]}"] for c in self.alphabet} for s in temp_states}
     for s in temp_states:
       transitions[f"{s[0]}x{s[1]}"][''] = []
+
     result = DFA(Q={f"{s[0]}x{s[1]}" for s in temp_states},
                 sigma=self.alphabet.copy(),
                 delta=transitions,
                 q0=f"{self.start}x{other.start}",
                 F={f"{s[0]}x{s[1]}" for s in temp_final})
-    return result.minimize()
+    return trim_states(result).minimize()
   
   def union(self, other):
     """
@@ -283,12 +286,13 @@ class DFA(FA):
     transitions = {f"{s[0]}x{s[1]}": {e: [f"{self.transitions[s[0]][e][0]}x{other.transitions[s[1]][e][0]}"] for e in self.alphabet} for s in temp_states}
     for s in temp_states:
       transitions[f"{s[0]}x{s[1]}"][''] = []
+
     result = DFA(Q={f"{s[0]}x{s[1]}" for s in temp_states},
                 sigma=self.alphabet.copy(),
                 delta=transitions,
                 q0=f"{self.start}x{other.start}",
                 F={f"{s[0]}x{s[1]}" for s in temp_states if (s[0] in self.final or s[1] in other.final)})
-    return result.minimize()
+    return trim_states(result).minimize()
   
   def minus(self, other):
     """
@@ -302,8 +306,10 @@ class DFA(FA):
       A new DFA whose accepted language is the set difference of this DFA and the given DFA's languages.
     """
     other = other.to_dfa()
-    return self.union(other.complement())
+    return self.intersect(other.complement())
       
+  def symmetric_difference(self, other):
+    return self.minus(other).union(other.minus(self))
 
   def minimize(self):
     """
@@ -319,7 +325,7 @@ class DFA(FA):
     def find_next(merger):
       for q in self.states:
         for r in self.states:
-          if merger[q][r]:
+          if merger[q][r] and q != r:
             for c in self.alphabet:
               if not merger[self.transitions[q][c][0]][self.transitions[r][c][0]]:
                 return q, r            
@@ -353,39 +359,64 @@ class DFA(FA):
       next_a, next_b = find_next(merge)
 
     new_states = []
-    old_states = set()
+    # old_states = set()
     for q in self.states:
-      m = False
+      # m = False
       for r in self.states:
         if r in merge[q].keys() and merge[q][r]:
-          m = True
+          # if q != r:
+          # m = True
           n = [s for s in new_states if q in s]
           if len(n) > 0:
             new_states[new_states.index(n[0])].add(r)
           else:
             new_states.append({str(q), str(r)})
           del merge[r][q]
-      if not m:
-        old_states.add(str(q))
+      # if not m:
+      #   old_states.add(str(q))
+    # print(old_states)
     merged_states = set()
-    states = old_states.copy()
-    map_to_new = {q: q for q in old_states}
+    # states = old_states.copy()
+    # map_to_new = {q: q for q in old_states}
+    map_to_new = {}
+    merge_map = {}
     for s in new_states:
       m = ''.join(s)
       merged_states.add(m)
+      merge_map[m] = s
       for q in s:
         map_to_new[q] = m
-    states.update(merged_states)
+    states = merged_states
     
-    transitions = {q: {c: [map_to_new[self.transitions[q][c][0]]] for c in self.alphabet} for q in old_states}
-    transitions.update({q: {c: [map_to_new[self.transitions[[r for r in self.states if map_to_new[r] == q][0]][c][0]]] for c in self.alphabet} for q in merged_states})
+    # transitions = {q: {c: [map_to_new[self.transitions[q][c][0]]] for c in self.alphabet} for q in old_states}
+    transitions = {q: {c: [map_to_new[self.transitions[[r for r in self.states if map_to_new[r] == q][0]][c][0]]] for c in self.alphabet} for q in merged_states}
     for q in states:
       transitions[q][''] = []
 
-    final = {q for q in old_states if q in self.final}.union({s for s in merged_states if len({q for q in s if q in self.final}) > 0})
+    # final = {q for q in old_states if q in self.final}.union({s for s in merged_states if len({q for q in merge_map[s] if q in self.final}) > 0})
+    final = {s for s in merged_states if len({q for q in merge_map[s] if q in self.final}) > 0}
     start = map_to_new[self.start]
 
     return simplify(states, transitions, start, final)
+
+def trim_states(automata):
+  visited = set()
+  to_visit = {automata.start}
+  while len(to_visit) > 0:
+    next = to_visit.pop()
+    visited.add(next)
+    to_visit.update([q for e in automata.sigma_alphabet for q in automata.transitions[next][e] if q not in visited])
+
+  transitions = automata.transitions.copy()
+  for q in automata.states:
+    if q not in visited:
+      del transitions[q]
+
+  return DFA(Q=visited, 
+             sigma=automata.alphabet, 
+             delta=transitions, 
+             q0=automata.start, 
+             F={q for q in automata.final if q in visited})
 
 class NFA(FA):
   """
@@ -554,7 +585,7 @@ class REGEX:
       self.alphabet = alphabet
     self.pattern = re.compile(f"^{self.string}$")
     self.nfa = None
-    self.nfa = self.to_nfa()
+    # self.nfa = self.to_nfa()
   
   def __str__(self):
     return self.string
@@ -608,7 +639,11 @@ class REGEX:
     Returns:
       True if the given string is generated by this regular expression, False otherwise
     """
-    return self.pattern.fullmatch(input) != None
+    if epsilon in self.string:
+      automata = self.to_nfa()
+      return automata.read(input)
+    else:
+      return self.pattern.fullmatch(input) != None
   
   def test(self, input, expected=True):
     """
@@ -737,4 +772,7 @@ def str_to_nfa(string, alphabet):
       transitions[str(i)][string[i]] = [str(i+1)]
     return NFA(Q=states, sigma=alphabet, delta=transitions, q0=start, F={str(len(string))})
 
+
   
+  
+
