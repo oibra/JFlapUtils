@@ -1,4 +1,5 @@
 import time
+from StringUtils import format_input
 
 square = '□'
 
@@ -28,26 +29,33 @@ class TM():
 
   def read(self, input, max_time=60):
     timeout = time.time() + max_time
-    tape = input + "□"
-    position = 0
+    tape = square + input + square
+    position = 1
     current = self.start
     configurations = [f"{current}{tape}"]
-    while True and time.time() < timeout:
-      transition = self.transitions[current][input[position]]
+    while time.time() < timeout:
+      # print(tape, position)
+      # if tape[position] not in self.transitions[current].keys():
+      #   return False, True
+
+      transition = self.transitions[current][tape[position]]
+      # print(transition)
       if transition == None:
-        return False
+        return False, True
       next, write, move = transition
       if next in self.accept:
-        return True
+        return True, True
       current = next
       if position == len(tape):
         tape += square
-      tape[position] = write
+      tape = f'{tape[:position]}{write}{tape[position+1:]}'
+      # tape[position] = write
       position += move
       config = f"{tape[:position]}{current}{tape[position:]}"
       if config in configurations:
-        return False
+        return False, False
       configurations.append(config)
+    return False, False
 
   def test(self, input, expected=True):
     """
@@ -60,10 +68,14 @@ class TM():
     Returns:
       Boolean representing whether this automata matches the expected behavior on the given input string
     """
-    result = self.read(input)
+    result, halt = self.read(input)
     if result != expected:
-      if expected:
+      if expected and halt:
         print(f"reading {format_input(input)} - expected: accept , actual: reject")
+      elif expected:
+        print(f"reading {format_input(input)} - expected: accept , actual: TM did not halt")
       else:
         print(f"reading {format_input(input)} - expected: reject , actual: accept")
-    return result == expected
+    elif not halt:
+      print(f"reading {format_input(input)} - expected: reject , actual: TM did not halt")
+    return (result == expected) and halt

@@ -1,6 +1,6 @@
 from bs4 import BeautifulSoup
 from RegularUtils import DFA, NFA, REGEX
-from CFUtils import CFG, PDA
+from CFUtils import GrammarWrapper, PDAWrapper
 from TMUtils import TM, square
 
 class JFFParser():
@@ -76,10 +76,10 @@ class JFFParser():
     productions = self.parse_tree.find_all('production')
     variables = parse_variables(productions)
     terminals = parse_terminals(productions, variables)
-    start = productions[0].find('right').string
+    start = productions[0].find('left').string
     rules = parse_rules(productions, variables)
 
-    return CFG(start, terminals, variables, rules)
+    return GrammarWrapper(start, terminals, variables, rules)
   
   def generate_pda(self):
     type = self.parse_tree.find('type').string
@@ -87,13 +87,16 @@ class JFFParser():
       raise TypeError('input file is not for a PDA!')
     alphabet = parse_alphabet(self.parse_tree, type)
     stack = parse_stack(self.parse_tree)
+    # print(alphabet)
+    # print(stack)
     states = parse_states(self.parse_tree)
     final_states = parse_final(self.parse_tree)
     start = parse_start(self.parse_tree)
     if start == None:
       raise AttributeError('no start state')
     transitions = parse_transitions(self.parse_tree, type, states, alphabet, stack)
-    return PDA(states, alphabet, stack, transitions, start, final_states)
+    
+    return PDAWrapper(states, alphabet, stack, transitions, start, final_states)
   
   def generate_tm(self):
     type = self.parse_tree.find('type').string
@@ -191,8 +194,9 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
   Returns:
   """
   delta = parse_tree.find_all('transition')
-  alphabet = alphabet.union({''})
+  
   if type == 'fa':
+    alphabet = alphabet.union({''})
     transitions = {state: {c: [] for c in alphabet} for state in states}
     # epsilon_transitions = {state: [] for state in states}
     for e in delta:
@@ -202,17 +206,26 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
       transitions[q][read].append(r)
     return transitions
   elif type == 'pda':
-    stack = alphabet.union({''})
+    alphabet = alphabet.union({''})
+    stack = stack.union({''})
     transitions = {state: {c: {x: [] for x in stack} for c in alphabet} for state in states}
+    # print(transitions)
     for e in delta:
       q = e.find('from').string
       r = e.find('to').string
       read = '' if e.find('read').string == None else e.find('read').string
       push = '' if e.find('push').string == None else e.find('push').string
       pop = '' if e.find('pop').string == None else e.find('pop').string
+
+      if len(push) >= 2:
+        raise AttributeError('PDA transitions must push at most 1 character onto the stack')
+      if len(pop) >= 2:
+        raise ArithmeticError('PDA transitions must pop at most 1 character off of the stack')
+
       transitions[q][read][pop].append((r, push))
     return transitions
   elif type == 'turing':
+    alphabet = alphabet.union({square})
     transitions = {state: {c: None for c in alphabet} for state in states}
     for e in delta:
       q = e.find('from').string
@@ -235,7 +248,9 @@ def parse_variables(productions):
   """
   variables = set()
   for r in productions:
-    variables.add(r.find('left').string)
+    v = r.find('left').string
+    if v:
+      variables.add(v)
   return variables
 
 def parse_terminals(productions, variables):
@@ -267,10 +282,10 @@ def parse_rules(productions, variables):
   """
   rules = {v: [] for v in variables}
   for r in productions:
-    v = r.find('right').string
-    rule = r.find('left').string
+    v = r.find('left').string
+    rule = r.find('right').string
     if rule == None:
-      rules[v].push([])
+      rules[v].append([])
     else:
       rulelist = []
       while rule != '':
@@ -282,5 +297,12 @@ def parse_rules(productions, variables):
           var = [a for a in start if len(a) == max([len(n) for n in start])][0]
           rulelist.append(var)
           rule = rule[len(var):]
-      rules[v].push(rulelist)
+      rules[v].append(rulelist)
+  return rules
 
+
+if __name__ == "__main__":
+  parser = JFFParser('testing/test_tm.jff')
+  g = parser.generate_tm()
+  for s in ['000', '000111', '111000', '', '00110011']:
+    print(g.test(s))

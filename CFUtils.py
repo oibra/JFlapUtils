@@ -1,251 +1,35 @@
-from StringUtils import format_input, replace
+from pyformlang.cfg import Production, Variable, Terminal, CFG
+from pyformlang.cfg import Epsilon as cfg_epsilon
+from pyformlang.pda import PDA, State, StackSymbol, Symbol
+from pyformlang.pda import Epsilon as pda_epsilon
+from StringUtils import format_input
 
-class CFG():
-  """
-  A class for representing a context-free grammar
+class GrammarWrapper():
+  def __init__(self, S=None, alpha=set(), V=set(), R=dict()):
+    variables = {Variable(v) for v in V}
+    terminals = {Terminal(t) for t in alpha}
+    start = Variable(S)
+    rules = set()
+    for v in V:
+      for r in R[v]:
+        rule = []
+        for c in r:
+          if c in V:
+            rule.append(Variable(c))
+          else:
+            rule.append(Terminal(c))
+        rules.add(Production(Variable(v), rule))
+    self.grammar = CFG(variables, terminals, start, rules)
 
-  Args:
-    S (str):
-    alpha (set):
-    V (set):
-    R (dict):
-
-  Attributes:
-    alphabet (set)
-    varibales (set)
-    rules (dict)
-    start (str)
-  """
-  def __init__(self, S=None, alpha=set(), V=set(), R=dict(), cnf=False):
-    self.alphabet = alpha
-    self.variables = V
-    self.rules = R
-    self.start = S
-
-    if cnf:
-      self.cnf = self
-    else: 
-      self.cnf = None
-
-  class Node():
-    """"""
-    def __init__(self, symbol, terminal=False):
-      self.string = symbol
-      self.is_terminal = terminal
-      self.children = list()
-
-    def __str__(self):
-      return f"({self.string}, {[str(child) for child in self.children]})"
-    
-    def __repr__(self):
-      return f"({self.string}, {[child for child in self.children]})"
-
-    def to_string(self):
-      """"""
-      if self.is_terminal: return self.string
-      elif len(self.children) == 0: return None
-      else:
-        s = [child.to_string() for child in self.children]
-        if None in s: return None
-        else: return ''.join(s)
-
-    def find_unexplored(self, v):
-      if self.is_terminal: return None
-      elif len(self.children) == 0 and self.string == v: return self
-      else:
-        for child in self.children:
-          n = child.find_unexplored(v)
-          if n != None: return n
-        return None
-
-    def first_var_leaf(self):
-      """"""
-      if self.is_terminal: return None
-      elif len(self.children) == 0: return self
-      else:
-        for child in self.children:
-          n = child.first_var_leaf()
-          if n != None: return n
-        return None
-    
-    def copy(self):
-      copy = CFG.Node(self.string, self.is_terminal)
-      copy.children = [child.copy() for child in self.children]
-      return copy
-
-  def to_cnf(self):
-    """
-    Creates an equivlant CFG in Chomsky-Normal Form (CNF) and returns it
-
-    Returns:
-    """
-    if self.cnf != None:
-      return self.cnf
-    variables = self.variables.copy()
-    start = f"{self.start}0"
-    variables.add(start)
-    rules = {start: [[self.start]]}
-    # BIN
-    for v in self.variables:
-      rules[v] = [rule for rule in self.rules[v] if len(rule) <= 2]
-      i = 0
-      for rule in self.rules[v]:
-        if len(rule) > 2:
-          i += 1
-          newv = f"{v}{i}"
-          rules[v].append([rule[0], newv])
-          variables.add(newv)
-          newrule = rule[1:]
-          while len(newrule) > 2:
-            oldv = newv
-            i += 1
-            newv = f"{v}{i}"
-            rules[oldv] = [[newrule[0], newv]]
-            newrule = newrule[1:]
-          rules[newv] = [newrule]
-    # DEL
-    del_queue = [v for v in variables if [] in rules[v]]
-    deleted = []
-    while len(del_queue) > 0:
-      v = del_queue.pop()
-      deleted.push(v)
-      rules[v].remove([])
-      for n in variables:
-        newrules = []
-        for rule in rules[n]:
-          if v in rule:
-            if rule.count(v) == 1:
-              newrule = rule.copy()
-              newrule.pop(rule.index(v))
-              if newrule != [n] and (n not in deleted or newrule != []):
-                newrules.append(newrule)
-            else:
-              if v != n:
-                newrules.append([rule[0]])
-                newrules.append([rule[1]])
-              if n not in deleted:
-                newrules.append([])
-        if [] in newrules and n not in del_queue and n != start:
-          del_queue.push(n)
-        rules[n].extend(newrules)
-    # UNIT
-    for v in variables:
-      unit_rules = [r for r in rules[v] if len(r) == 1 and r[0] in variables]
-      while(len(unit_rules) > 0):
-        unit = unit_rules.pop()
-        rules[v].remove(unit)
-        rules[v].extend(rules[unit[0]])
-        if [v] in rules[v]: rules[v].remove([v])
-        unit_rules = [r for r in rules[v] if len(r) == 1 and r[0] in variables]
-    # TERM
-    alpha = ''.join(self.alphabet)
-    term = [alpha.index(c) for c in self.alphabet]
-    rules.update({f"V{c}": [alpha[c]] for c in term})
-    for v in variables:
-      for rule in rules[v]:
-        if len(rule) == 2:
-          if rule[0] in self.alphabet:
-            rule[0] = f"V{alpha.index(rule[0])}"
-          if rule[1] in self.alphabet:
-            rule[1] = f"V{alpha.index(rule[1])}"
-    variables.update(f"V{c}" for c in term)
-
-    self.cnf = CFG(start, self.alphabet, variables, rules, True)
-    return self.cnf
-
-  def test(self, input, expected=True):
-    """
-    Processes given input string and returns if the acceptance behavior matches expected
-
-    Args:
-      input (str) : input string to read
-      expected (bool) : expected result of computation
-
-    Returns:
-      Boolean representing whether this automata matches the expected behavior on the given input string
-    """
-    result = self.read(input)
-    if result != expected:
-      if expected:
-        print(f"reading {format_input(input)} - expected: accept , actual: reject")
-      else:
-        print(f"reading {format_input(input)} - expected: reject , actual: accept")
-    return result == expected
 
   def read(self, input):
-    """
-    Determines if the given input is generated by this grammar
-
-    Args:
-      input (str)
-
-    Returns:
-    """
-    cnf = self.to_cnf()
-    if input == "": return [] in cnf.rules[cnf.start]
-    else: 
-      find, _ = cnf.generate(self.Node(cnf.start), input, [cnf.start])
-      return find
+    if input == '':
+      return self.grammar.generate_epsilon()
+    else:
+      s = [Terminal(c) for c in input]
+      return self.grammar.contains(s)
   
-  def parse_tree(self, input):
-    """
-    Generates a parse tree for the given string in the cnf form of this grammar, if it is generated
-
-    Args:
-      input (str)
-
-    Returns:
-    """
-    if input != "":
-      find, tree = self.generate(input, self.Node(self.start), [self.start])
-      if find: return tree
-    return None
-  
-  def generate(self, goal, root, phrase):
-    V = None
-    for sym in phrase:
-      if sym in self.variables:
-        V = sym
-        break
-
-    if V == None and len(phrase) == len(goal):
-      p = ''.join(phrase)
-      return (p == goal), root.copy()
-    elif len(phrase) <= len(goal) and V != None:
-      curr = root.find_unexplored(V)
-      for rule in self.rules[V]:
-        if len(rule) + len(phrase) - 1 <= len(goal):
-          terms = [c for c in rule if c not in self.variables and phrase.count(c) >= goal.count(c)]
-          if len(terms) == 0:
-            newphrase = replace(phrase, V, rule)
-            curr.children = [CFG.Node(child, child not in self.variables) for child in rule]
-            find, tree = self.generate(goal, root, newphrase)
-            if find:  
-              return find, tree
-            curr.children = []
-    return False, root
-
-class PDA():
-  """"""
-  def __init__(self, Q=None, alpha=set(), stack=set(), delta={}, q0=None, F=set()):
-    self.states = Q
-    self.sigma = alpha
-    self.gamma = stack
-    self.transitions = delta
-    self.start = q0 
-    self.final = F
-
   def test(self, input, expected=True):
-    """
-    Processes given input string and returns if the acceptance behavior matches expected
-
-    Args:
-      input (str) : input string to read
-      expected (bool) : expected result of computation
-
-    Returns:
-      Boolean representing whether this automata matches the expected behavior on the given input string
-    """
     result = self.read(input)
     if result != expected:
       if expected:
@@ -254,33 +38,113 @@ class PDA():
         print(f"reading {format_input(input)} - expected: reject , actual: accept")
     return result == expected
 
-  def read(self, input, curr=None, stack=[]):
-    if curr == None: curr = self.start
-    if input == '' and curr in self.final:
-      return True
-    for q,s in self.transitions[curr]['']['']:
-      if s != '': stack.append(s)
-      if self.read(input, q, stack): return True
-      if s != '': stack.pop()
-      
-    x = stack[-1]
-    stack.pop()
-    for q,s in self.transitions[curr][''][x]:
-      if s != '': stack.append(s)
-      if self.read(input, q, stack): return True
-      if s != '': stack.pop()
-    stack.append(x)
+class PDAWrapper():
+  def __init__(self, Q=None, alpha=set(), stack=set(), delta={}, q0=None, F=set()):
+    s = stack.copy()
+    s.add('')
+    stack.add('$')
 
-    if input != '':
-      for q,s in self.transitions[curr][input[0]]['']:
-        if s != '': stack.append(s)
-        if self.read(input[1:], q, stack): return True
-        if s != '': stack.pop()
-      x = stack[-1]
-      stack.pop()
-      for q,s in self.transitions[curr][input[0]][x]:
-        if s != '': stack.append(s)
-        if self.read(input[1:], q, stack): return True
-        if s != '': stack.pop()
-      stack.append(x)
-    return False
+    alpha = alpha.copy()
+    alpha.add('')
+
+    self.automata = PDA(states={State(q) for q in Q},
+                        start_state=State(q0),
+                        start_stack_symbol=StackSymbol('$'),
+                        final_states={State(q) for q in F})
+
+    for q in Q:
+      for i in alpha:
+        j = Symbol(i) if i != '' else pda_epsilon()
+        for x in s:
+          for r, y in delta[q][i][x]:
+            if x == '' and y == '':
+              self.automata.add_transitions([(State(q), j, StackSymbol(e), State(r), [StackSymbol(e)]) for e in stack])
+            elif x == '':
+              self.automata.add_transitions([(State(q), j, StackSymbol(e), State(r), [StackSymbol(y), StackSymbol(e)]) for e in stack])
+            elif y == '':
+              self.automata.add_transition(State(q), j, StackSymbol(x), State(r), [])
+            else:
+              self.automata.add_transition(State(q), j, StackSymbol(x), State(r), [StackSymbol(y)])
+    
+    self.grammar = self.automata.to_empty_stack().to_cfg()
+
+
+  def read(self, input):
+    if input == '':
+      return self.grammar.generate_epsilon()
+    else:
+      return self.grammar.contains(input)
+  
+  def test(self, input, expected=True):
+    result = self.read(input)
+    if result != expected:
+      if expected:
+        print(f"reading {format_input(input)} - expected: accept , actual: reject")
+      else:
+        print(f"reading {format_input(input)} - expected: reject , actual: accept")
+    return result == expected
+
+def parse_variables(productions):
+  """
+  Args:
+    productions (list): a list XML nodes representing grammar production rules
+
+  Returns:
+    a set of Variables for the given CFG
+  """
+  var_map = {}
+  variables = set()
+  for r in productions:
+    v = r.find('left').string
+    if v:
+      var_map[v] = Variable(v)
+      variables.add(var_map[v])
+  return variables, var_map
+
+def parse_terminals(productions, variables):
+  """
+  Args:
+    productions (list): a list XML nodes representing grammar production rules
+    variables (set): a set of variables for the given CFG
+
+  Returns:
+    a set of Terminals for the given CFG
+  """
+  # terminals = set()
+  term_map = {}
+  for r in productions:
+    rule = r.find('right').string
+    if rule != None:
+      for v in variables:
+        rule = rule.replace(v.to_text(), '')
+      term_map.update({t: Terminal(t) for t in rule})
+  return term_map.values(), term_map
+
+def parse_rules(productions, variables, terminals):
+  """
+  Args:
+    productions (list): a list XML nodes representing grammar production rules
+    variables (set): a set of variables for the given CFG
+
+  Returns:
+    a dict of rules for the given CFG. maps variables to a list of rules, each of which is a list of symbols
+  """
+  rules = set()
+  for r in productions:
+    v = variables[r.find('left').string]
+    rule = r.find('right').string
+    if rule == None:
+      rules.add(Production(v, []))
+    else:
+      rulelist = []
+      while rule != '':
+        start = [n for n in variables.keys() if rule.startswith(n)]
+        if len(start) == 0:
+          rulelist.append(terminals[rule[0]])
+          rule = rule[1:]
+        else:
+          var = [a for a in start if len(a) == max([len(n) for n in start])][0]
+          rulelist.append(variables[var])
+          rule = rule[len(var):]
+      rules.add(Production(v, rulelist))
+  return rules
