@@ -220,7 +220,7 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
       if len(push) >= 2:
         raise AttributeError('PDA transitions must push at most 1 character onto the stack')
       if len(pop) >= 2:
-        raise ArithmeticError('PDA transitions must pop at most 1 character off of the stack')
+        raise AttributeError('PDA transitions must pop at most 1 character off of the stack')
 
       transitions[q][read][pop].append((r, push))
     return transitions
@@ -233,7 +233,10 @@ def parse_transitions(parse_tree, type, states, alphabet, stack=None):
       read = square if e.find('read').string == None else e.find('read').string
       write = square if e.find('write').string == None else e.find('write').string
       move = 1 if e.find('move').string == 'R' else -1
-      transitions[q][read] = (r, write, move)
+      if transitions[q][read] == None:
+        transitions[q][read] = (r, write, move)
+      else:
+        raise AttributeError(f'TMs must be deterministic; this TM has multiple transitions on {read} from state {q}')
     return transitions
 
 ### GRAMMAR HELPER FUNCITONS ###
@@ -302,7 +305,7 @@ def parse_rules(productions, variables):
 
 
 if __name__ == "__main__":
-  parser = JFFParser('testing/test_tm.jff')
+  parser = JFFParser('testing/question3b.jff')
   g = parser.generate_tm()
-  for s in ['000', '000111', '111000', '', '00110011']:
+  for s in ['000111222222']:
     print(g.test(s))
